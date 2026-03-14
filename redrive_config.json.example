@@ -1,0 +1,17 @@
+{
+  "restim_url": "ws://localhost:12346",
+  "ctrl_port": 8765,
+  "axis_volume": "L0",
+  "axis_beta": "L1",
+  "axis_alpha": "L2",
+  "tcode_floor": 0,
+  "beta_off": 9999,
+  "beta_light": 8099,
+  "beta_active": 5000,
+  "beta_thresh": 0.35,
+  "alpha_min_hz": 0.3,
+  "alpha_max_hz": 1.5,
+  "alpha_min_amp": 0.2,
+  "alpha_max_amp": 0.45,
+  "send_interval_ms": 50
+}
