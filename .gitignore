@@ -16,6 +16,11 @@ redrive_config.json
 
 # touch_assets/ — tracked fully (add anatomy PNGs and tool cursor PNGs freely)
 
+# PyInstaller / Inno Setup build output
+dist/
+build/
+*.spec.bak
+
 # OS
 .DS_Store
 Thumbs.db

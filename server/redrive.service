@@ -1,0 +1,16 @@
+[Unit]
+Description=ReDrive relay server
+After=network.target
+
+[Service]
+Type=simple
+User=redrive
+WorkingDirectory=/opt/redrive
+ExecStart=/opt/redrive/.venv/bin/python server/server.py --port 8765
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

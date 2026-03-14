@@ -16,11 +16,16 @@ import math
 import queue
 import random as _rng
 import threading
-import tkinter as tk
 from dataclasses import dataclass, asdict, field, fields as dc_fields
 from pathlib import Path
-from tkinter import ttk
-from typing import Optional
+from typing import Optional, Callable
+
+try:
+    import tkinter as tk
+    from tkinter import ttk
+    _HAS_TK = True
+except ImportError:
+    _HAS_TK = False
 
 import aiohttp
 from aiohttp import web
@@ -1638,10 +1643,12 @@ initRadios(); loadAnatomyList(); loadToolImages(); draw();
 # ── Bridge + pattern engine (asyncio thread) ──────────────────────────────────
 
 class DriveEngine:
-    def __init__(self, cfg: DriveConfig, shared: dict, log_q: queue.Queue):
+    def __init__(self, cfg: DriveConfig, shared: dict, log_q: queue.Queue,
+                 send_hook: Optional[Callable[[str], None]] = None):
         self._cfg          = cfg
         self._shared       = shared
         self._log_q        = log_q
+        self._send_hook    = send_hook   # if set: called instead of direct ReStim WS
         self._ws           = None
         self._session      = None
         self._pattern      = PatternEngine()
@@ -1694,6 +1701,9 @@ class DriveEngine:
             return False
 
     async def _send(self, cmd: str):
+        if self._send_hook is not None:
+            self._send_hook(cmd)
+            return
         if self._ws is None or self._ws.closed:
             now = self._loop.time()
             if now < self._next_connect_at:
@@ -2091,18 +2101,18 @@ class DriveEngine:
         self._loop    = asyncio.get_event_loop()
         self._stop_ev = asyncio.Event()
 
-        await self._start_http()
-
-        if not await self._connect():
-            self._log("Could not connect to ReStim — check URL and try Start again")
-
-        # Park all axes on start
-        cfg = self._cfg
-        await self._send(
-            f"{cfg.axis_beta}{cfg.beta_off:04d}I0 "
-            f"{cfg.axis_volume}0000I0 "
-            f"{cfg.axis_alpha}{_tv(0.5)}I0"
-        )
+        if self._send_hook is None:
+            # Local mode: start HTTP server and connect to ReStim directly
+            await self._start_http()
+            if not await self._connect():
+                self._log("Could not connect to ReStim — check URL and try Start again")
+            # Park all axes on start
+            cfg = self._cfg
+            await self._send(
+                f"{cfg.axis_beta}{cfg.beta_off:04d}I0 "
+                f"{cfg.axis_volume}0000I0 "
+                f"{cfg.axis_alpha}{_tv(0.5)}I0"
+            )
 
         try:
             await asyncio.gather(self._pattern_loop(), self._alpha_loop())

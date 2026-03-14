@@ -85,6 +85,55 @@ Both are marked with a warning comment pointing at each other.
 
 ---
 
+## Cloud relay (multi-rider)
+
+ReDrive can run on a public server so the driver uses a shareable URL instead
+of a LAN IP.  Multiple riders connect to the same room simultaneously.
+
+### Architecture
+
+```
+Driver browser ──POST /room/CODE/command──▶ server.py (DriveEngine per room)
+                                                │
+                                      T-code broadcast
+                                                │
+Rider 1  rider_client.py ◀──WS /room/CODE/rider◀┘
+Rider 2  rider_client.py ◀──WS /room/CODE/rider
+```
+
+The pattern engine lives on the server.  `rider_client.py` is a thin bridge
+that forwards T-code from the relay to the local ReStim WebSocket.
+
+### Quick deploy (Ubuntu 22.04 droplet)
+
+```bash
+# On the server (as root):
+bash server/setup.sh
+```
+
+The script installs nginx, certbot, a Python venv, the systemd service, and
+obtains a TLS certificate for `redrive.estimstation.com`.
+
+### Rider setup
+
+On the rider's machine (the one connected to the ReStim device):
+
+```bash
+pip install aiohttp
+python rider_client.py XXXXXXXXXX          # 10-char code from driver
+```
+
+The rider can also open `https://redrive.estimstation.com/room/CODE/touch`
+on their phone for the touch control page.
+
+### Room codes
+
+- 10 characters from an unambiguous alphabet (no 0/O/1/I/L)
+- Each room expires after 24 hours of inactivity
+- Driver copies the code via the banner shown at the top of the driver page
+
+---
+
 ## Acknowledgements
 
 - [ReStim](https://github.com/diglet48/restim) by diglet48 — the e-stim engine this bridges to
