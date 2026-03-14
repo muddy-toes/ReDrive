@@ -1071,7 +1071,8 @@ TOUCH_HTML = r"""
     background: var(--bg); color: var(--fg);
     font-family: Arial, sans-serif; font-size: 14px;
     display: flex; flex-direction: column;
-    padding: 8px; max-width: 480px; margin: 0 auto; gap: 5px;
+    padding: 8px; padding-top: calc(8px + env(safe-area-inset-top));
+    max-width: 480px; margin: 0 auto; gap: 5px;
     user-select: none; -webkit-user-select: none; touch-action: none;
   }
   .top-row { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
@@ -1089,20 +1090,7 @@ TOUCH_HTML = r"""
   #conn { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
   #cdot { width: 9px; height: 9px; border-radius: 50%; background: var(--err); flex-shrink: 0; }
   #ctxt { color: var(--fg2); font-size: 11px; }
-  .main-area { flex: 1; display: flex; gap: 5px; min-height: 0; }
-  #tool-col { width: 50px; flex-shrink: 0; display: flex; flex-direction: column; gap: 5px; }
-  .tool-btn {
-    flex: 1; background: var(--bg3); color: var(--fg2);
-    border: 1px solid var(--border); border-radius: 5px;
-    font-size: 18px; cursor: pointer; text-align: center;
-    display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 2px; padding: 4px 2px;
-  }
-  .tool-btn span { font-size: 9px; line-height: 1; }
-  .tool-btn.active { font-weight: bold; }
-  .tool-btn[data-tool="feather"].active { background:#141428; border-color:#88aaff; color:#88aaff; }
-  .tool-btn[data-tool="hand"].active    { background:#1e1e1e; border-color:#ffffff; color:#ffffff; }
-  .tool-btn[data-tool="stroker"].active { background:#241400; border-color:#ff8800; color:#ff8800; }
+  #main-area { flex: 1; min-height: 0; display: flex; position: relative; }
   #anatomy-wrap { flex: 1; min-width: 0; position: relative; border-radius: 6px; }
   @keyframes loop-pulse {
     0%,100% { box-shadow: 0 0 0 0 rgba(95,163,255,0.5); }
@@ -1110,31 +1098,46 @@ TOUCH_HTML = r"""
   }
   #anatomy-wrap.looping { animation: loop-pulse 1.1s ease-in-out infinite; }
   #anatomy { width: 100%; height: 100%; display: block; border-radius: 6px; cursor: none; touch-action: none; }
-  #electrode-col {
-    width: 76px; flex-shrink: 0; display: flex; flex-direction: column;
-    justify-content: space-between; gap: 4px; padding: 1px 0;
+  #tool-bar {
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    padding: 8px 12px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+    background: var(--bg2);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
   }
-  .elec-row {
-    flex: 1; display: flex; flex-direction: column; align-items: flex-start;
-    justify-content: center; gap: 4px; padding: 4px;
-    border: 1px solid var(--border); border-radius: 4px; background: var(--bg3);
+  .tool-btn {
+    flex: 1;
+    min-height: 52px;
+    background: var(--bg3);
+    color: var(--fg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 22px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 4px;
+    touch-action: manipulation;
   }
-  .elec-anat { font-size: 9px; color: var(--fg2); font-weight: bold; letter-spacing: .06em; }
-  .elec-radios { display: flex; gap: 5px; align-items: center; }
-  .elec-radios label { display: flex; flex-direction: column; align-items: center; gap: 1px; cursor: pointer; }
-  .elec-radios input[type=radio] { width: 14px; height: 14px; cursor: pointer; accent-color: var(--accent); }
-  .elec-radios span { font-size: 10px; font-weight: bold; line-height: 1; }
-  .ea-lbl { color: var(--ea); }
-  .eb-lbl { color: var(--eb); }
-  .ec-lbl { color: var(--ec); }
+  .tool-btn span { font-size: 10px; line-height: 1; }
+  .tool-btn.active { font-weight: bold; }
+  .tool-btn[data-tool="feather"].active { background:#141428; border-color:#88aaff; color:#88aaff; }
+  .tool-btn[data-tool="hand"].active    { background:#1e1e1e; border-color:#ffffff; color:#ffffff; }
+  .tool-btn[data-tool="stroker"].active { background:#241400; border-color:#ff8800; color:#ff8800; }
   #anatomy-picker {
     display: flex; gap: 6px; overflow-x: auto; flex-shrink: 0;
-    padding: 2px 0 4px; min-height: 58px; align-items: flex-start;
+    padding: 2px 0 4px; min-height: 70px; align-items: flex-start;
   }
   .anat-thumb {
-    width: 40px; height: 52px; border-radius: 4px; cursor: pointer;
+    width: 48px; height: 64px; border-radius: 6px; cursor: pointer;
     border: 2px solid var(--border); flex-shrink: 0; overflow: hidden;
-    background: var(--bg3); position: relative;
+    background: var(--bg3); position: relative; touch-action: manipulation;
   }
   .anat-thumb canvas, .anat-thumb img { width: 100%; height: 100%; display: block; object-fit: cover; }
   .anat-thumb.active { border-color: var(--accent); }
@@ -1172,48 +1175,47 @@ TOUCH_HTML = r"""
   <span id="bottle-dur-val" style="font-size:10px;color:var(--warn);min-width:22px">10s</span>
 </div>
 
-<div class="main-area">
-  <div id="tool-col">
-    <button class="tool-btn active" data-tool="feather" onclick="selectTool(this)">
-      &#129302;<span>Feather</span>
-    </button>
-    <button class="tool-btn" data-tool="hand" onclick="selectTool(this)">
-      &#9995;<span>Hand</span>
-    </button>
-    <button class="tool-btn" data-tool="stroker" onclick="selectTool(this)">
-      &#9889;<span>Stroker</span>
-    </button>
-  </div>
-
+<div id="main-area">
   <div id="anatomy-wrap">
     <canvas id="anatomy"></canvas>
   </div>
+</div>
 
-  <div id="electrode-col">
-    <div class="elec-row" data-anat="tip">
-      <div class="elec-anat">&#9650; TIP</div>
-      <div class="elec-radios">
-        <label><input type="radio" name="tip-e" value="A"><span class="ea-lbl">A</span></label>
-        <label><input type="radio" name="tip-e" value="B" checked><span class="eb-lbl">B</span></label>
-        <label><input type="radio" name="tip-e" value="C"><span class="ec-lbl">C</span></label>
-      </div>
-    </div>
-    <div class="elec-row" data-anat="balls">
-      <div class="elec-anat">&#9679; BALLS</div>
-      <div class="elec-radios">
-        <label><input type="radio" name="balls-e" value="A"><span class="ea-lbl">A</span></label>
-        <label><input type="radio" name="balls-e" value="B"><span class="eb-lbl">B</span></label>
-        <label><input type="radio" name="balls-e" value="C" checked><span class="ec-lbl">C</span></label>
-      </div>
-    </div>
-    <div class="elec-row" data-anat="anus">
-      <div class="elec-anat">&#9660; ANUS</div>
-      <div class="elec-radios">
-        <label><input type="radio" name="anus-e" value="A" checked><span class="ea-lbl">A</span></label>
-        <label><input type="radio" name="anus-e" value="B"><span class="eb-lbl">B</span></label>
-        <label><input type="radio" name="anus-e" value="C"><span class="ec-lbl">C</span></label>
-      </div>
-    </div>
+<div id="tool-bar">
+  <button class="tool-btn active" data-tool="feather" onclick="selectTool(this)">
+    &#129302;<span>Feather</span>
+  </button>
+  <button class="tool-btn" data-tool="hand" onclick="selectTool(this)">
+    &#9995;<span>Hand</span>
+  </button>
+  <button class="tool-btn" data-tool="stroker" onclick="selectTool(this)">
+    &#9889;<span>Stroker</span>
+  </button>
+  <button class="tool-btn" id="elec-toggle-btn">
+    &#9889;<span>Elec</span>
+  </button>
+</div>
+
+<div id="elec-sheet-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100" onclick="closeElecSheet()"></div>
+<div id="elec-sheet" style="position:fixed;bottom:-100%;left:0;right:0;background:var(--bg2);border-top:2px solid var(--border);border-radius:16px 16px 0 0;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom));z-index:101;transition:bottom 0.25s ease">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div style="font-size:13px;font-weight:bold;color:var(--fg)">Electrode Assignment</div>
+    <button onclick="closeElecSheet()" style="background:none;border:none;color:var(--fg2);font-size:20px;cursor:pointer;padding:4px 8px">&#10005;</button>
+  </div>
+  <!-- tip row -->
+  <div style="margin-bottom:10px">
+    <div style="font-size:10px;color:var(--fg2);font-weight:bold;letter-spacing:0.08em;margin-bottom:6px">TIP</div>
+    <div style="display:flex;gap:8px" id="elec-tip"></div>
+  </div>
+  <!-- balls row -->
+  <div style="margin-bottom:10px">
+    <div style="font-size:10px;color:var(--fg2);font-weight:bold;letter-spacing:0.08em;margin-bottom:6px">BALLS</div>
+    <div style="display:flex;gap:8px" id="elec-balls"></div>
+  </div>
+  <!-- anus row -->
+  <div>
+    <div style="font-size:10px;color:var(--fg2);font-weight:bold;letter-spacing:0.08em;margin-bottom:6px">ANUS</div>
+    <div style="display:flex;gap:8px" id="elec-anus"></div>
   </div>
 </div>
 
@@ -1254,6 +1256,41 @@ let elecAt = JSON.parse(localStorage.getItem('elecAt') || 'null')
 
 function saveElecAt() { localStorage.setItem('elecAt', JSON.stringify(elecAt)); }
 
+function buildElecSheet() {
+  ['tip','balls','anus'].forEach(anat => {
+    const container = document.getElementById('elec-' + anat);
+    container.innerHTML = '';
+    ['A','B','C'].forEach(elec => {
+      const btn = document.createElement('button');
+      btn.textContent = elec;
+      btn.style.cssText = `flex:1;min-height:48px;border-radius:8px;border:2px solid ${ELEC_COLOR[elec]};background:${elecAt[anat]===elec ? ELEC_COLOR[elec]+'33' : 'var(--bg3)'};color:${ELEC_COLOR[elec]};font-size:18px;font-weight:bold;cursor:pointer;touch-action:manipulation;transition:background 0.15s`;
+      btn.onclick = () => {
+        // swap if conflict
+        const prev = Object.entries(elecAt).find(([a,e]) => a !== anat && e === elec);
+        if (prev) elecAt[prev[0]] = elecAt[anat];
+        elecAt[anat] = elec;
+        localStorage.setItem('elecAt', JSON.stringify(elecAt));
+        buildElecSheet();
+        draw();
+      };
+      container.appendChild(btn);
+    });
+  });
+}
+
+function openElecSheet() {
+  buildElecSheet();
+  document.getElementById('elec-sheet-bg').style.display = 'block';
+  document.getElementById('elec-sheet').style.bottom = '0';
+}
+
+function closeElecSheet() {
+  document.getElementById('elec-sheet-bg').style.display = 'none';
+  document.getElementById('elec-sheet').style.bottom = '-100%';
+}
+
+document.getElementById('elec-toggle-btn').addEventListener('click', openElecSheet);
+
 function betaFromY(y) {
   const pts = Object.entries(elecAt)
     .map(([anat, elec]) => ({ y: ANAT_YF[anat], beta: ELEC_BETA[elec] }))
@@ -1273,31 +1310,6 @@ function intensityFromX(x) {
   const t = TOOLS[currentTool]; return t.min + x * (t.max - t.min);
 }
 
-function initRadios() {
-  for (const [anat, elec] of Object.entries(elecAt)) {
-    const r = document.querySelector(`input[name="${anat}-e"][value="${elec}"]`);
-    if (r) r.checked = true;
-  }
-}
-
-function onElecChange(anat, newElec) {
-  const prevElec = elecAt[anat];
-  for (const [a, e] of Object.entries(elecAt)) {
-    if (a !== anat && e === newElec) { elecAt[a] = prevElec; break; }
-  }
-  elecAt[anat] = newElec;
-  saveElecAt();
-  for (const [a, e] of Object.entries(elecAt)) {
-    const r = document.querySelector(`input[name="${a}-e"][value="${e}"]`);
-    if (r) r.checked = true;
-  }
-  buildPicker();
-  draw();
-}
-
-document.querySelectorAll('.elec-radios input').forEach(r => {
-  r.addEventListener('change', () => onElecChange(r.closest('.elec-row').dataset.anat, r.value));
-});
 
 // ── Anatomy picker ─────────────────────────────────────────────────────────
 let anatVariants  = [];
@@ -1330,8 +1342,8 @@ function buildPicker() {
     wrap.title = v.label;
     if (v.type === 'canvas') {
       const tc = document.createElement('canvas');
-      tc.width = 40; tc.height = 52;
-      v.drawFn(tc.getContext('2d'), 40, 52, true);
+      tc.width = 48; tc.height = 64;
+      v.drawFn(tc.getContext('2d'), 48, 64, true);
       wrap.appendChild(tc);
     } else {
       const img = document.createElement('img'); img.src = v.src; img.alt = v.label;
@@ -1695,7 +1707,7 @@ setInterval(async()=>{
   } catch(_) { setConn(false); }
 },1500);
 
-initRadios(); loadAnatomyList(); loadToolImages(); draw();
+loadAnatomyList(); loadToolImages(); draw();
 </script>
 <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
 <script>
