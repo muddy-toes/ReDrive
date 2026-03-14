@@ -318,7 +318,10 @@ def build_app() -> web.Application:
     app.router.add_get("/room/{code}/rider",          handle_rider_ws)
     app.router.add_get("/touch_assets/list",          handle_assets_list)
     app.router.add_get("/touch_assets/{type}/{name}", handle_assets_file)
-    app.on_startup.append(lambda _: asyncio.ensure_future(_cleanup_loop()))
+    async def _start_cleanup(_app):
+        asyncio.ensure_future(_cleanup_loop())
+
+    app.on_startup.append(_start_cleanup)
     return app
 
 
@@ -328,5 +331,10 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--host", default="0.0.0.0")
     args = parser.parse_args()
-    print(f"ReDrive relay → http://{args.host}:{args.port}")
-    web.run_app(build_app(), host=args.host, port=args.port)
+    print(f"ReDrive relay → http://{args.host}:{args.port}", flush=True)
+    try:
+        web.run_app(build_app(), host=args.host, port=args.port,
+                    access_log=None)
+    except Exception as e:
+        print(f"FATAL: {e}", flush=True)
+        import traceback; traceback.print_exc()
