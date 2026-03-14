@@ -14,11 +14,7 @@ env/
 # Config (contains local IP / port settings — copy redrive_config.json.example instead)
 redrive_config.json
 
-# Custom anatomy / tool images (user-specific, can be large) — keep folder structure
-touch_assets/anatomy/*
-touch_assets/tools/*
-!touch_assets/anatomy/.gitkeep
-!touch_assets/tools/.gitkeep
+# touch_assets/ — tracked fully (add anatomy PNGs and tool cursor PNGs freely)
 
 # OS
 .DS_Store
