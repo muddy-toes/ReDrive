@@ -43,7 +43,7 @@ systemctl enable --now nginx
 # --- TLS via Let's Encrypt ---
 echo ""
 echo ">>> Obtaining TLS certificate for $DOMAIN"
-certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m nanakiraymaker@gmail.com
+certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m admin@$DOMAIN
 systemctl reload nginx
 
 # --- systemd service ---
