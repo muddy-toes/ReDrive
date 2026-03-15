@@ -1244,6 +1244,7 @@ let lastY       = 0.5;
 let gestureRec  = [];
 let gestureStart= 0;
 let looping     = false;
+let _trail      = [];   // [{x,y,t}] ghostly trail points
 
 // Electrode assignment: tip/balls/anus -> A/B/C label
 // A = beta 0 (one physical end), B = beta 9999 (other end), C = beta 5000 (neutral)
@@ -1424,6 +1425,7 @@ function onDown(e) {
   pointerDown = true; gestureRec = []; gestureStart = performance.now();
   const pos = getPos(e);
   lastBeta = betaFromY(pos.y); lastX = pos.x; lastY = pos.y;
+  _trail = []; _trail.push({x:lastX, y:lastY, t:Date.now()});
   gestureRec.push({t:0, beta:lastBeta, intensity:intensityFromX(pos.x)});
   sendCmd({ gesture_stop:true, beta_mode:'hold', beta:lastBeta, intensity:intensityFromX(pos.x) });
   setLooping(false); draw();
@@ -1434,6 +1436,7 @@ function onMove(e) {
   e.preventDefault();
   const pos = getPos(e);
   lastBeta = betaFromY(pos.y); lastX = pos.x; lastY = pos.y;
+  _trail.push({x:lastX, y:lastY, t:Date.now()}); if (_trail.length>60) _trail.shift();
   gestureRec.push({t:(performance.now()-gestureStart)/1000, beta:lastBeta, intensity:intensityFromX(pos.x)});
   sendCmd({ beta:lastBeta, intensity:intensityFromX(pos.x) });
   draw();
@@ -1680,6 +1683,32 @@ function drawToolCursor(ctx, W, H) {
   ctx.setLineDash([]);
 }
 
+function drawTrail(ctx, W, H) {
+  if (_trail.length < 2) return;
+  const now = Date.now(), FADE = 1800; // ms to fully fade
+  for (let i = 0; i < _trail.length; i++) {
+    const p = _trail[i];
+    const age = now - p.t;
+    if (age > FADE) continue;
+    const f = 1 - age / FADE;          // 1=fresh, 0=gone
+    const r = 4 + f * 8;               // radius shrinks with age
+    ctx.beginPath();
+    ctx.arc(p.x * W, p.y * H, r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(95,163,255,${(f * f * 0.55).toFixed(3)})`;
+    ctx.fill();
+  }
+  // bright head dot
+  const head = _trail[_trail.length - 1];
+  ctx.beginPath();
+  ctx.arc(head.x * W, head.y * H, 6, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(95,163,255,0.90)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(head.x * W, head.y * H, 10, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(95,163,255,0.35)';
+  ctx.lineWidth = 2; ctx.stroke();
+}
+
 function draw() {
   const W=cvs.offsetWidth, H=cvs.offsetHeight;
   if (W<10||H<10) return;
@@ -1694,10 +1723,25 @@ function draw() {
   }
   drawToolBand(ctx,W,H);
   drawElecLabels(ctx,W,H);
+  drawTrail(ctx,W,H);
   if (pointerDown) drawToolCursor(ctx,W,H);
 }
 
+// Fade trail over time while not touching
+(function trailTick() {
+  if (_trail.length) {
+    const now = Date.now();
+    _trail = _trail.filter(p => now - p.t < 1800);
+    draw();
+  }
+  requestAnimationFrame(trailTick);
+})();
+
 const ro=new ResizeObserver(()=>draw()); ro.observe(document.getElementById('anatomy-wrap'));
+
+// Fix Main nav link → room page (strip /touch from path)
+document.getElementById('nav-link').href =
+  window.location.pathname.replace(/\/touch$/, '') || '/';
 
 setInterval(async()=>{
   try {
