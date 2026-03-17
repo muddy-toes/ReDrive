@@ -312,6 +312,13 @@ DRIVER_HTML = r"""<!DOCTYPE html>
     letter-spacing:.04em; font-weight:bold; line-height:1.3;
   }
   #overlay-btn.active { background:#182818; border-color:#4a8040; color:#88cc70; }
+  #cursor-btn {
+    flex-shrink:0; width:58px; padding:5px 2px;
+    background:var(--bg3); border:1px solid var(--border); border-radius:5px;
+    color:var(--fg2); font-size:9px; cursor:pointer; text-align:center;
+    letter-spacing:.04em; font-weight:bold; line-height:1.3;
+  }
+  #cursor-btn.active { background:#18181e; border-color:#5055aa; color:#9090ff; }
   .rider-card {
     width:58px; height:80px; border-radius:6px; border:1px solid var(--border);
     overflow:hidden; position:relative; flex-shrink:0; background:#222; cursor:pointer;
@@ -519,6 +526,7 @@ DRIVER_HTML = r"""<!DOCTYPE html>
   <div id="rider-col">
     <div id="rider-cards"></div>
     <button id="overlay-btn" onclick="toggleOverlay(this)" title="Overlay guide: ON">GUIDE<br>ON</button>
+    <button id="cursor-btn" onclick="toggleCursor(this)" title="Cursor: dot">DOT</button>
   </div>
 
   <!-- Right: tab area -->
@@ -1541,14 +1549,22 @@ function tcDraw() {
     glow.addColorStop(0.55,_tcPowerColor(power,0.12));
     glow.addColorStop(1,_tcPowerColor(power,0));
     ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(curX,curY,glowR,0,Math.PI*2); ctx.fill();
-    // Core dot
-    ctx.beginPath(); ctx.arc(curX,curY,dotR,0,Math.PI*2);
-    ctx.fillStyle=_tcPowerColor(power,0.55+power*0.40); ctx.fill();
-    // Ring — thicker/harder at high power
-    ctx.beginPath(); ctx.arc(curX,curY,dotR,0,Math.PI*2);
-    ctx.strokeStyle=_tcPowerColor(power,0.85);
-    ctx.lineWidth=1+power*2.5; ctx.stroke();
-    // % label above dot
+    if (_tcCursorMode==='grid') {
+      // Crosshair: full-width H line + full-height V line, width scales with power like dotR
+      ctx.strokeStyle=_tcPowerColor(power,0.55+power*0.40);
+      ctx.lineWidth=dotR; ctx.lineCap='butt';
+      ctx.beginPath(); ctx.moveTo(0,curY); ctx.lineTo(W,curY); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(curX,0); ctx.lineTo(curX,H); ctx.stroke();
+    } else {
+      // Core dot
+      ctx.beginPath(); ctx.arc(curX,curY,dotR,0,Math.PI*2);
+      ctx.fillStyle=_tcPowerColor(power,0.55+power*0.40); ctx.fill();
+      // Ring — thicker/harder at high power
+      ctx.beginPath(); ctx.arc(curX,curY,dotR,0,Math.PI*2);
+      ctx.strokeStyle=_tcPowerColor(power,0.85);
+      ctx.lineWidth=1+power*2.5; ctx.stroke();
+    }
+    // % label (same for both modes) — floats above cursor point
     const pct=Math.round(power*100)+'%';
     ctx.fillStyle=_tcPowerColor(power,0.95);
     ctx.font=`bold ${11+Math.round(power*5)}px Arial`;
@@ -1813,6 +1829,26 @@ function initTouchPanel() {
     } catch(_) {}
   }, 1500);
 }
+
+// ── Cursor mode ───────────────────────────────────────────────────────────────
+let _tcCursorMode = localStorage.getItem('reDriveCursor') || 'dot'; // 'dot' | 'grid'
+
+function toggleCursor(btn) {
+  _tcCursorMode = _tcCursorMode === 'dot' ? 'grid' : 'dot';
+  localStorage.setItem('reDriveCursor', _tcCursorMode);
+  btn.textContent = _tcCursorMode === 'dot' ? 'DOT' : 'GRID';
+  btn.title = 'Cursor: ' + _tcCursorMode;
+  btn.classList.toggle('active', _tcCursorMode === 'grid');
+  if (_driverMode === 'touch') tcDraw();
+}
+
+(function initCursorBtn() {
+  const btn = document.getElementById('cursor-btn');
+  if (!btn) return;
+  btn.textContent = _tcCursorMode === 'dot' ? 'DOT' : 'GRID';
+  btn.title = 'Cursor: ' + _tcCursorMode;
+  btn.classList.toggle('active', _tcCursorMode === 'grid');
+})();
 
 // ── Overlay guide ─────────────────────────────────────────────────────────────
 let tcOverlayImg = null;
