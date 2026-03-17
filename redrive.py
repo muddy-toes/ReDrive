@@ -1262,6 +1262,7 @@ let tcCustomImg   = null;
 let tcServerInt   = 0.5;
 let _tcGesturePath= [], _tcLooping=false, _tcLoopStart=0, _tcLoopDur=0, _tcGestureStart=0;
 let _tcPowerSlider = 0.5; // 0=min 1=max, default middle
+let _tcParticipants = []; // latest participants list from WS
 
 function tcElecAt() {
   const valid = ['1','2','3','4'];
@@ -1650,6 +1651,8 @@ function tcBuildPicker() {
         w.style.borderColor=(w.dataset.anatId===first.id)?'var(--accent)':'var(--border)';
       });
     }
+    // Apply rider names to picker labels
+    _tcRefreshPickerNames();
   };
 
   if (apiUrl) {
@@ -1663,6 +1666,28 @@ function tcBuildPicker() {
       finish([], files||[]);
     }).catch(()=>finish([],[]));
   }
+}
+
+function _tcRefreshPickerNames() {
+  // Label custom picker items with rider names where anatomy filename matches
+  if (!_tcParticipants.length) return;
+  const el = document.getElementById('tc-picker'); if (!el) return;
+  el.querySelectorAll('[data-anat-id]').forEach(wrap => {
+    const aid = wrap.dataset.anatId;
+    const p = _tcParticipants.find(x => x.anatomy && (x.anatomy === aid || x.anatomy.endsWith('/'+aid) || aid.endsWith('/'+x.anatomy)));
+    if (!p) return;
+    const lbl = wrap.querySelector('div:last-child');
+    if (lbl) lbl.textContent = p.name || lbl.textContent;
+    // Add a small rider icon to distinguish
+    let badge = wrap.querySelector('.rider-badge');
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.className = 'rider-badge';
+      badge.style.cssText = 'position:absolute;top:2px;left:2px;font-size:8px;z-index:3;line-height:1;background:rgba(0,0,0,0.6);border-radius:2px;padding:1px 2px;color:#5fa3ff';
+      badge.textContent = '👤';
+      wrap.appendChild(badge);
+    }
+  });
 }
 
 function initTouchPanel() {
@@ -1719,6 +1744,32 @@ function initTouchPanel() {
     } catch(_) {}
   }, 1500);
 }
+
+// ── Driver WebSocket — receive participants_update ────────────────────────────
+(function connectDriverWS() {
+  if (typeof DRIVER_KEY === 'undefined' || typeof ROOM_CODE === 'undefined') return;
+  const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = wsProto + '//' + location.host + '/room/' + ROOM_CODE + '/driver-ws?key=' + encodeURIComponent(DRIVER_KEY);
+  let _driverWs = null;
+  function connect() {
+    try {
+      const ws = new WebSocket(wsUrl);
+      _driverWs = ws;
+      ws.onmessage = ev => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.type === 'participants_update') {
+            _tcParticipants = msg.participants || [];
+            if (_driverMode === 'touch') _tcRefreshPickerNames();
+          }
+        } catch(_) {}
+      };
+      ws.onclose = () => { _driverWs = null; setTimeout(connect, 5000); };
+      ws.onerror = () => { try { ws.close(); } catch(_) {} };
+    } catch(_) { setTimeout(connect, 5000); }
+  }
+  connect();
+})();
 </script>
 <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
 <script>
@@ -1864,6 +1915,13 @@ TOUCH_HTML = r"""<!DOCTYPE html>
 
 <div id="footer">
   <button id="room-code-btn" onclick="copyRoomCode(this)"></button>
+  <label id="upload-avatar-btn" title="Upload your anatomy image (sets your avatar)"
+    style="padding:4px 10px;background:none;border:1px solid var(--border);border-radius:4px;
+           color:var(--fg2);font-size:11px;cursor:pointer">
+    &#128247; My Pic
+    <input type="file" id="anat-file-input" accept="image/png,image/jpeg,image/webp"
+           style="display:none" onchange="onAnatFileSelected(this)">
+  </label>
   <button id="leave-btn" onclick="window.location='/'">Leave &#8599;</button>
 </div>
 
@@ -1923,7 +1981,7 @@ let _bottlePhaseTimer    = null;
 
 setInterval(async () => {
   try {
-    const d = await (await fetch(_BASE + '/state')).json();
+    const d = await (await fetch(_BASE + '/rider-state')).json();
     setConn(true);
     updatePower(d.intensity ?? 0);
     if (d.bottle_active) showBottleOverlay(d.bottle_mode || 'normal', d.bottle_remaining || 0);
@@ -2018,8 +2076,13 @@ function renderRidersPanel(data) {
       ? `background-image:url('${url}');background-size:cover;background-position:top center`
       : 'background:#222';
     return `<div class="rider-card">
-      <div class="rider-avatar" style="${bg}"></div>
-      <div class="rider-name">${(p.name||'Rider').replace(/</g,'&lt;')}</div>
+      <div class="rider-avatar" style="${bg};position:relative">
+        <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.65);
+          font-size:8px;color:#ccc;text-align:center;padding:2px;
+          border-radius:0 0 5px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          ${(p.name||'Rider').replace(/</g,'&lt;')}
+        </div>
+      </div>
     </div>`;
   }).join('');
 }
@@ -2062,6 +2125,51 @@ function sendLike(emoji) {
     } catch(_) { setTimeout(connect, 5000); }
   }
   connect();
+})();
+
+// ── Anatomy upload (rider avatar) ─────────────────────────────────────────────
+async function onAnatFileSelected(input) {
+  if (!input.files || !input.files[0] || !_ROOM_CODE) return;
+  const file = input.files[0]; input.value = '';
+  const btn = document.getElementById('upload-avatar-btn');
+  const orig = btn ? btn.childNodes[0].textContent : '';
+  if (btn) btn.childNodes[0].textContent = '⏳ Uploading…';
+  try {
+    const fd = new FormData(); fd.append('file', file);
+    const r = await fetch(_BASE + '/upload_anatomy', {method:'POST', body:fd});
+    if (r.ok) {
+      // Save for future auto-upload
+      const reader = new FileReader();
+      reader.onload = e => {
+        localStorage.setItem('reDriveAnatomyB64', e.target.result);
+        localStorage.setItem('reDriveAnatomyName', file.name);
+      };
+      reader.readAsDataURL(file);
+      if (btn) { btn.childNodes[0].textContent = '✓ Uploaded!'; setTimeout(()=>{ btn.childNodes[0].textContent = orig; }, 2000); }
+    } else {
+      if (btn) { btn.childNodes[0].textContent = '✗ Failed'; setTimeout(()=>{ btn.childNodes[0].textContent = orig; }, 2000); }
+    }
+  } catch(_) {
+    if (btn) { btn.childNodes[0].textContent = '✗ Error'; setTimeout(()=>{ btn.childNodes[0].textContent = orig; }, 2000); }
+  }
+}
+
+// Auto-upload saved anatomy when joining a room
+(async function autoUploadAnatomy() {
+  if (!_ROOM_CODE) return;
+  const b64  = localStorage.getItem('reDriveAnatomyB64');
+  const name = localStorage.getItem('reDriveAnatomyName') || 'my_pic.png';
+  if (!b64) return;
+  try {
+    // Only upload if room has no custom anatomy yet
+    const res = await fetch(_BASE + '/anatomies');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.custom && data.custom.length > 0) return;
+    const blob = await fetch(b64).then(r => r.blob());
+    const fd = new FormData(); fd.append('file', blob, name);
+    await fetch(_BASE + '/upload_anatomy', {method:'POST', body:fd});
+  } catch(_) {}
 })();
 </script>
 </body>

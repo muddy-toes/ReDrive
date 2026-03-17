@@ -860,6 +860,30 @@ async def handle_room_command(req):
     return await room.engine._handle_command_data(cmd)
 
 
+async def handle_rider_state(req):
+    """Public (no auth) state endpoint for riders — intensity + bottle info only."""
+    code = req.match_info["code"]
+    room = _rooms.get(code)
+    if room is None:
+        raise web.HTTPNotFound(text="Room not found or expired")
+    now = time.monotonic()
+    intensity = 0.0
+    if room.engine:
+        state = await room.engine._handle_state(req)
+        d = json.loads(state.text)
+        intensity = d.get("intensity", 0.0)
+    bottle_active = now < room.bottle_until
+    return web.Response(
+        text=json.dumps({
+            "intensity":        round(intensity, 4),
+            "bottle_active":    bottle_active,
+            "bottle_remaining": max(0.0, round(room.bottle_until - now, 1)),
+            "bottle_mode":      room.bottle_mode,
+        }),
+        content_type="application/json"
+    )
+
+
 async def handle_room_state(req):
     code = req.match_info["code"]
     room = _rooms.get(code)
@@ -907,6 +931,41 @@ async def handle_driver_ping(req):
     grace_left = max(0, _DRIVER_GRACE - (time.monotonic() - room.driver_last_seen))
     return web.Response(text=json.dumps({"ok": True, "grace_left": int(grace_left)}),
                         content_type="application/json")
+
+
+async def handle_driver_ws(req):
+    """Driver connects here via WebSocket to receive participants_update broadcasts."""
+    code = req.match_info["code"]
+    room = _rooms.get(code)
+    if room is None:
+        raise web.HTTPNotFound(text="Room not found or expired")
+    key = req.rel_url.query.get("key", "")
+    if not secrets.compare_digest(key, room.driver_key):
+        raise web.HTTPForbidden(text="Invalid driver key")
+
+    ws = web.WebSocketResponse(heartbeat=30)
+    await ws.prepare(req)
+    room.driver_wss.add(ws)
+
+    # Send current participants immediately on connect
+    try:
+        parts = list(room.participants.values())
+        await ws.send_str(json.dumps({
+            "type": "participants_update",
+            "participants": parts,
+            "driver_name": room.driver_name,
+        }))
+    except Exception:
+        pass
+
+    try:
+        async for msg in ws:
+            if msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSE):
+                break
+    finally:
+        room.driver_wss.discard(ws)
+
+    return ws
 
 
 async def handle_rider_ws(req):
@@ -1797,8 +1856,10 @@ def build_app() -> web.Application:
     app.router.add_get("/room/{code}/join",                    handle_room_join)
     app.router.add_post("/room/{code}/command",                handle_room_command)
     app.router.add_get("/room/{code}/state",                   handle_room_state)
+    app.router.add_get("/room/{code}/rider-state",             handle_rider_state)
     app.router.add_post("/room/{code}/bottle",                 handle_room_bottle)
     app.router.add_get("/room/{code}/rider",                   handle_rider_ws)
+    app.router.add_get("/room/{code}/driver-ws",               handle_driver_ws)
     app.router.add_post("/room/{code}/ping",                   handle_driver_ping)
     app.router.add_post("/room/{code}/privacy",                handle_room_privacy)
     # Anatomy upload
