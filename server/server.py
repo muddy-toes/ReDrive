@@ -583,7 +583,7 @@ _LANDING_HTML = """<!DOCTYPE html>
 <footer class="site-footer">
   &copy; EstimStation &middot;
   <a href="https://www.estimstation.com">estimstation.com</a> &middot;
-  ReDrive is open-source
+  <a href="https://github.com/blucrew/ReDrive" target="_blank" rel="noopener">ReDrive is open-source</a>
 </footer>
 
 </div><!-- /wrap -->
