@@ -1297,7 +1297,7 @@ TOUCH_HTML = r"""
     <div class="legend">
       <div class="leg"><div class="ldot" style="background:var(--e1)"></div>Red</div>
       <div class="leg"><div class="ldot" style="background:var(--e2)"></div>Blue</div>
-      <div class="leg"><div class="ldot" style="background:var(--e3)"></div>Yellow</div>
+      <div class="leg"><div class="ldot" style="background:var(--e3)"></div>Neutral</div>
       <div class="leg"><div class="ldot" style="background:var(--e4)"></div>Green</div>
     </div>
   </div>
@@ -1324,11 +1324,11 @@ let _loopStart  = 0;    // performance.now() when looping began
 let _loopDur    = 0;    // duration of one loop cycle (ms)
 
 // Electrode assignment: tip/balls/anus -> 1/2/3/4 (FOC box: Red/Blue/Yellow/Green)
-// FOC box wires left→right: Red(1), Blue(2), Yellow(3), Green(4)
+// FOC box wires left→right: Red(1), Blue(2), Neutral/Yellow(3), Green(4)
 const ELEC_BETA  = { '1':0, '2':2500, '3':7500, '4':9999 };
 const ANAT_YF    = { tip:0.0, balls:0.5, anus:1.0 };
 const ELEC_COLOR = { '1':'#ff4444', '2':'#4488ff', '3':'#ffcc14', '4':'#44cc70' };
-const ELEC_LABEL = { '1':'Red', '2':'Blue', '3':'Yellow', '4':'Green' };
+const ELEC_LABEL = { '1':'Red', '2':'Blue', '3':'Neutral', '4':'Green' };
 
 let elecAt = JSON.parse(localStorage.getItem('elecAt') || 'null')
           || { tip:'2', balls:'3', anus:'1' };
@@ -1427,7 +1427,7 @@ async function loadAnatomyList() {
         // Custom uploads first
         for (const f of (data.custom || []))
           anatVariants.unshift({ id:f, label:f.split('/').pop().replace(/\.[^.]+$/, ''),
-                                 type:'png', src:'/touch_assets/anatomy/' + f });
+                                 type:'png', src:'/touch_assets/anatomy/' + f, custom:true });
         // Standard assets
         for (const f of (data.standard || []))
           anatVariants.push({ id:f, label:f.replace(/\.[^.]+$/, ''), type:'png',
@@ -1499,9 +1499,33 @@ function _addCustomAnatomy(name) {
     label: name.split('/').pop().replace(/\.[^.]+$/, ''),
     type: 'png',
     src: '/touch_assets/anatomy/' + name,
+    custom: true,
   });
   buildPicker();
   selectAnat(name);
+}
+
+async function autoUploadStoredAnatomy() {
+  if (!_ROOM_CODE) return;
+  const b64 = localStorage.getItem('reDriveAnatomyB64');
+  const name = localStorage.getItem('reDriveAnatomyName') || 'my_overlay.png';
+  if (!b64) return;
+  // Check if room already has custom anatomy
+  try {
+    const res = await fetch('/room/' + _ROOM_CODE + '/anatomies');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.custom && data.custom.length > 0) return; // already has one
+  } catch(_) { return; }
+  // Convert base64 back to blob and upload
+  try {
+    const blob = await fetch(b64).then(r => r.blob());
+    const fd = new FormData();
+    fd.append('file', blob, name);
+    await fetch('/room/' + _ROOM_CODE + '/upload_anatomy', {method:'POST', body:fd});
+    // Reload anatomy list to show the freshly uploaded image
+    await loadAnatomyList();
+  } catch(_) {}
 }
 
 function buildPicker() {
@@ -1523,6 +1547,26 @@ function buildPicker() {
     const lbl = document.createElement('div');
     lbl.className = 'anat-thumb-label'; lbl.textContent = v.label;
     wrap.appendChild(lbl);
+    if (v.custom) {
+      const forgetBtn = document.createElement('button');
+      forgetBtn.textContent = '\uD83D\uDDD1';
+      forgetBtn.title = 'Forget my overlay';
+      forgetBtn.style.cssText = 'position:absolute;top:2px;right:2px;width:16px;height:16px;' +
+        'padding:0;font-size:10px;line-height:1;background:rgba(30,0,0,0.85);' +
+        'border:none;border-radius:3px;color:#f44336;cursor:pointer;z-index:5;' +
+        'display:flex;align-items:center;justify-content:center;touch-action:manipulation';
+      forgetBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        localStorage.removeItem('reDriveAnatomyB64');
+        localStorage.removeItem('reDriveAnatomyName');
+        // Remove from variants and refresh picker
+        const idx = anatVariants.indexOf(v);
+        if (idx !== -1) anatVariants.splice(idx, 1);
+        if (currentAnatId === v.id) selectAnat('default');
+        buildPicker();
+      });
+      wrap.appendChild(forgetBtn);
+    }
     wrap.addEventListener('click', () => selectAnat(v.id));
     el.appendChild(wrap);
   }
@@ -1963,7 +2007,7 @@ setInterval(async()=>{
   } catch(_) { setConn(false); }
 },1500);
 
-loadAnatomyList(); loadToolImages(); draw();
+loadAnatomyList(); loadToolImages(); draw(); autoUploadStoredAnatomy();
 
 // ── Room WebSocket (anatomy_added + driver_joined messages) ───────────────
 (function connectRoomWS() {
