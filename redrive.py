@@ -423,7 +423,6 @@ DRIVER_HTML = r"""<!DOCTYPE html>
   <button id="mode-toggle-btn" onclick="toggleMode()"
     style="padding:3px 10px;background:#222;border:1px solid #444;color:#ccc;
            border-radius:4px;cursor:pointer;font-size:11px;white-space:nowrap">&#128400; Touch</button>
-  <a href="/touch" style="color:var(--fg2);font-size:11px;text-decoration:none;padding:4px 8px;border:1px solid var(--border);border-radius:4px;white-space:nowrap">Touch &#8599;</a>
 </div>
 
 <div id="status-bar">
@@ -1596,7 +1595,7 @@ TOUCH_HTML = r"""
   #cdot { width: 9px; height: 9px; border-radius: 50%; background: var(--err); flex-shrink: 0; }
   #ctxt { color: var(--fg2); font-size: 11px; }
   #main-area { flex: 1; min-height: 0; display: flex; position: relative; }
-  #anatomy-wrap { flex: 1; min-width: 0; position: relative; border-radius: 6px; }
+  #anatomy-wrap { flex: 1; min-width: 0; min-height: 0; height: 100%; position: relative; border-radius: 6px; }
   @keyframes loop-pulse {
     0%,100% { box-shadow: 0 0 0 0 rgba(95,163,255,0.5); }
     50%      { box-shadow: 0 0 0 8px rgba(95,163,255,0); }
