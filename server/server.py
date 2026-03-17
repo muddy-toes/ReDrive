@@ -491,7 +491,8 @@ _LANDING_HTML = """<!DOCTYPE html>
 <footer class="site-footer">
   &copy; EstimStation &middot;
   <a href="https://www.estimstation.com">estimstation.com</a> &middot;
-  ReDrive is open source
+  ReDrive is open source &middot;
+  <a href="/anatomy-maker" style="color:#5fa3ff">&#x1F5BC; Make your own anatomy overlay &rarr;</a>
 </footer>
 
 <script>
@@ -1070,6 +1071,348 @@ async def handle_waiting_claim(req):
     raise web.HTTPFound(f"/room/{code}?key={room.driver_key}")
 
 
+# ── Anatomy overlay maker ─────────────────────────────────────────────────────
+
+_ANATOMY_MAKER_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ReDrive &middot; Anatomy Overlay Maker</title>
+<style>
+  :root { --bg:#111; --bg2:#1a1a1a; --bg3:#222; --border:#2a2a2a;
+          --fg:#f0f0f5; --fg2:#999; --accent:#5fa3ff; --ok:#4caf50; }
+  * { box-sizing:border-box; margin:0; padding:0 }
+  body { background:var(--bg); color:var(--fg);
+         font:15px/1.6 system-ui,Helvetica,sans-serif;
+         max-width:340px; margin:0 auto; padding:1.4rem 1rem 3rem }
+  h1 { color:var(--accent); font-size:1.3rem; margin-bottom:.15rem }
+  .sub { color:var(--fg2); font-size:.85rem; margin-bottom:1.6rem }
+  .step-label { color:var(--accent); font-weight:700; font-size:.82rem;
+                text-transform:uppercase; letter-spacing:.08em; margin-bottom:.5rem }
+  .section { margin-bottom:1.4rem }
+  label { color:var(--fg2); font-size:.88rem; display:block; margin-bottom:.25rem }
+  input[type=file] { display:none }
+  .file-btn { display:inline-block; padding:.6rem 1.2rem;
+              background:var(--bg2); border:1px solid var(--border);
+              border-radius:6px; cursor:pointer; font-size:.95rem;
+              color:var(--fg); transition:border-color .15s }
+  .file-btn:hover { border-color:var(--accent) }
+  canvas { display:block; border:1px solid var(--border); border-radius:6px;
+           touch-action:none; cursor:grab }
+  canvas:active { cursor:grabbing }
+  .tip { color:var(--fg2); font-size:.78rem; margin-top:.4rem; text-align:center }
+  .slider-row { display:flex; align-items:center; gap:.6rem; margin-bottom:.5rem }
+  .slider-row label { min-width:52px; color:var(--fg2); font-size:.85rem; margin:0 }
+  input[type=range] { flex:1; accent-color:var(--accent) }
+  .slider-val { min-width:44px; text-align:right; color:var(--fg);
+                font-size:.85rem; font-family:monospace }
+  .dl-btn { width:100%; padding:.85rem; background:var(--ok);
+            color:#fff; border:none; border-radius:6px; font-size:1rem;
+            font-weight:700; cursor:pointer; transition:opacity .15s }
+  .dl-btn:hover { opacity:.85 }
+  .dl-btn:disabled { opacity:.4; cursor:default }
+  hr { border:none; border-top:1px solid var(--border); margin:1.4rem 0 }
+  .how-to { color:var(--fg2); font-size:.85rem; line-height:1.8 }
+  .how-to ul { padding-left:1.2rem }
+  .how-to li { margin-bottom:.15rem }
+  .back { color:var(--accent); text-decoration:none; font-size:.85rem }
+  .back:hover { text-decoration:underline }
+</style>
+</head>
+<body>
+
+<p style="margin-bottom:.8rem"><a href="/" class="back">&larr; Back to ReDrive</a></p>
+<h1>ReDrive &middot; Anatomy Overlay Maker</h1>
+<p class="sub">Position your photo behind the outline, then export a 400&times;1000&nbsp;px overlay.</p>
+
+<!-- Step 1 -->
+<div class="section">
+  <div class="step-label">Step 1 &mdash; Upload your photo</div>
+  <label class="file-btn" for="photo-input">&#128247; Choose photo</label>
+  <input type="file" id="photo-input" accept="image/*">
+</div>
+
+<!-- Step 2 -->
+<div class="section">
+  <div class="step-label">Step 2 &mdash; Align to the outline</div>
+  <canvas id="preview" width="280" height="700"></canvas>
+  <p class="tip">Drag to move &middot; scroll / pinch to zoom</p>
+
+  <div style="margin-top:.9rem">
+    <div class="slider-row">
+      <label for="sl-scale">Scale</label>
+      <input type="range" id="sl-scale" min="10" max="300" value="100">
+      <span class="slider-val" id="lbl-scale">100%</span>
+    </div>
+    <div class="slider-row">
+      <label for="sl-rotate">Rotate</label>
+      <input type="range" id="sl-rotate" min="-180" max="180" value="0">
+      <span class="slider-val" id="lbl-rotate">0&deg;</span>
+    </div>
+  </div>
+</div>
+
+<!-- Step 3 -->
+<div class="section">
+  <div class="step-label">Step 3 &mdash; Save</div>
+  <button class="dl-btn" id="dl-btn" disabled onclick="downloadOverlay()">
+    &#128190; Download overlay.png
+  </button>
+</div>
+
+<hr>
+<div class="how-to">
+  <strong style="color:var(--fg);font-size:.9rem">How to use your overlay</strong>
+  <ul style="margin-top:.5rem">
+    <li>Open the <strong>ReDrive Rider</strong> app</li>
+    <li>In the &ldquo;My overlay&rdquo; section, click <strong>Set&hellip;</strong></li>
+    <li>Select the <em>overlay.png</em> you just downloaded</li>
+    <li>Connect to a session &mdash; your overlay will upload automatically</li>
+  </ul>
+</div>
+
+<script>
+(function () {
+  const PREVIEW_W = 280, PREVIEW_H = 700;
+  const EXPORT_W  = 400, EXPORT_H  = 1000;
+
+  const canvas    = document.getElementById('preview');
+  const ctx       = canvas.getContext('2d');
+  const slScale   = document.getElementById('sl-scale');
+  const slRotate  = document.getElementById('sl-rotate');
+  const lblScale  = document.getElementById('lbl-scale');
+  const lblRotate = document.getElementById('lbl-rotate');
+  const dlBtn     = document.getElementById('dl-btn');
+
+  let userImg   = null;
+  let overlayImg = null;
+  let panX = PREVIEW_W / 2;   // 140
+  let panY = PREVIEW_H / 2;   // 350
+  let zoom = 1.0;
+  let rotRad = 0;
+
+  // ── Load overlay image ───────────────────────────────────────────────────
+  (function loadOverlay() {
+    const img = new Image();
+    img.onload = () => { overlayImg = img; redraw(); };
+    img.onerror = () => { overlayImg = null; redraw(); };
+    img.src = '/touch_assets/anatomy/anatomyexampleOVERLAY.png';
+  })();
+
+  // ── Fallback outline ─────────────────────────────────────────────────────
+  function drawFallbackOutline(c, W, H) {
+    c.save();
+    c.globalAlpha = 0.55;
+    c.strokeStyle = '#aaaacc';
+    c.lineWidth = 2;
+    // Glans
+    c.beginPath();
+    c.ellipse(W/2, H*0.08, W*0.22, H*0.06, 0, 0, Math.PI*2);
+    c.stroke();
+    // Shaft
+    c.beginPath();
+    c.moveTo(W/2 - W*0.12, H*0.13);
+    c.lineTo(W/2 - W*0.10, H*0.42);
+    c.moveTo(W/2 + W*0.12, H*0.13);
+    c.lineTo(W/2 + W*0.10, H*0.42);
+    c.stroke();
+    // Left testicle
+    c.beginPath();
+    c.ellipse(W/2 - W*0.22, H*0.50, W*0.18, H*0.10, -0.2, 0, Math.PI*2);
+    c.stroke();
+    // Right testicle
+    c.beginPath();
+    c.ellipse(W/2 + W*0.22, H*0.50, W*0.18, H*0.10, 0.2, 0, Math.PI*2);
+    c.stroke();
+    // Perineum/anus region
+    c.beginPath();
+    c.ellipse(W/2, H*0.80, W*0.08, H*0.04, 0, 0, Math.PI*2);
+    c.stroke();
+    c.restore();
+  }
+
+  // ── Redraw ───────────────────────────────────────────────────────────────
+  function redraw() {
+    ctx.clearRect(0, 0, PREVIEW_W, PREVIEW_H);
+
+    // Layer 1: user photo
+    if (userImg) {
+      ctx.save();
+      ctx.translate(panX, panY);
+      ctx.rotate(rotRad);
+      ctx.scale(zoom, zoom);
+      ctx.drawImage(userImg, -userImg.naturalWidth / 2, -userImg.naturalHeight / 2);
+      ctx.restore();
+    }
+
+    // Layer 2: anatomy outline at 60% opacity
+    if (overlayImg && overlayImg.complete && overlayImg.naturalWidth > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.6;
+      ctx.drawImage(overlayImg, 0, 0, PREVIEW_W, PREVIEW_H);
+      ctx.restore();
+    } else {
+      drawFallbackOutline(ctx, PREVIEW_W, PREVIEW_H);
+    }
+  }
+
+  // ── File input ───────────────────────────────────────────────────────────
+  document.getElementById('photo-input').addEventListener('change', function () {
+    const file = this.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        userImg = img;
+        // Auto-fit: scale so the image fills the canvas height
+        const fitScale = PREVIEW_H / img.naturalHeight;
+        zoom = fitScale;
+        slScale.value = Math.round(zoom * 100);
+        lblScale.textContent = slScale.value + '%';
+        panX = PREVIEW_W / 2;
+        panY = PREVIEW_H / 2;
+        rotRad = 0;
+        slRotate.value = 0;
+        lblRotate.textContent = '0\u00b0';
+        dlBtn.disabled = false;
+        redraw();
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // ── Sliders ──────────────────────────────────────────────────────────────
+  slScale.addEventListener('input', function () {
+    zoom = parseInt(this.value) / 100;
+    lblScale.textContent = this.value + '%';
+    redraw();
+  });
+
+  slRotate.addEventListener('input', function () {
+    rotRad = parseInt(this.value) * Math.PI / 180;
+    lblRotate.textContent = this.value + '\u00b0';
+    redraw();
+  });
+
+  // ── Mouse drag ───────────────────────────────────────────────────────────
+  let dragging = false, dragStartX = 0, dragStartY = 0, panStartX = 0, panStartY = 0;
+
+  canvas.addEventListener('mousedown', e => {
+    dragging = true;
+    dragStartX = e.clientX; dragStartY = e.clientY;
+    panStartX = panX; panStartY = panY;
+  });
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    panX = panStartX + (e.clientX - dragStartX);
+    panY = panStartY + (e.clientY - dragStartY);
+    redraw();
+  });
+  window.addEventListener('mouseup', () => { dragging = false; });
+
+  // ── Mouse wheel zoom ─────────────────────────────────────────────────────
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    zoom *= Math.pow(1.001, e.deltaY);
+    zoom = Math.max(0.1, Math.min(5.0, zoom));
+    slScale.value = Math.round(zoom * 100);
+    lblScale.textContent = slScale.value + '%';
+    redraw();
+  }, { passive: false });
+
+  // ── Touch (pan + pinch) ──────────────────────────────────────────────────
+  let lastTouches = [];
+
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    lastTouches = Array.from(e.touches);
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const touches = Array.from(e.touches);
+
+    if (touches.length === 1 && lastTouches.length >= 1) {
+      // Pan
+      const dx = touches[0].clientX - lastTouches[0].clientX;
+      const dy = touches[0].clientY - lastTouches[0].clientY;
+      panX += dx; panY += dy;
+      redraw();
+    } else if (touches.length === 2 && lastTouches.length >= 2) {
+      // Pinch-zoom
+      const prevDist = Math.hypot(
+        lastTouches[0].clientX - lastTouches[1].clientX,
+        lastTouches[0].clientY - lastTouches[1].clientY);
+      const newDist = Math.hypot(
+        touches[0].clientX - touches[1].clientX,
+        touches[0].clientY - touches[1].clientY);
+      if (prevDist > 0) {
+        zoom *= newDist / prevDist;
+        zoom = Math.max(0.1, Math.min(5.0, zoom));
+        slScale.value = Math.round(zoom * 100);
+        lblScale.textContent = slScale.value + '%';
+        redraw();
+      }
+    }
+
+    lastTouches = touches;
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', e => {
+    lastTouches = Array.from(e.touches);
+  }, { passive: false });
+
+  // ── Export ───────────────────────────────────────────────────────────────
+  window.downloadOverlay = function () {
+    const scale = EXPORT_W / PREVIEW_W; // 1.4286
+    const off = document.createElement('canvas');
+    off.width = EXPORT_W; off.height = EXPORT_H;
+    const octx = off.getContext('2d');
+
+    // Draw photo
+    if (userImg) {
+      octx.save();
+      octx.translate(panX * scale, panY * scale);
+      octx.rotate(rotRad);
+      octx.scale(zoom * scale, zoom * scale);
+      octx.drawImage(userImg, -userImg.naturalWidth / 2, -userImg.naturalHeight / 2);
+      octx.restore();
+    }
+
+    // Draw overlay at full opacity
+    octx.globalAlpha = 1.0;
+    if (overlayImg && overlayImg.complete && overlayImg.naturalWidth > 0) {
+      octx.drawImage(overlayImg, 0, 0, EXPORT_W, EXPORT_H);
+    } else {
+      drawFallbackOutline(octx, EXPORT_W, EXPORT_H);
+    }
+
+    off.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'redrive-overlay.png';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+    }, 'image/png');
+  };
+
+  // Initial draw (shows outline only until photo loaded)
+  redraw();
+})();
+</script>
+</body>
+</html>
+"""
+
+
+async def handle_anatomy_maker(_req):
+    return web.Response(text=_ANATOMY_MAKER_HTML, content_type="text/html")
+
+
 # ── Public session list + privacy ─────────────────────────────────────────────
 
 async def handle_api_rooms(req):
@@ -1255,6 +1598,7 @@ async def _cleanup_loop():
 def build_app() -> web.Application:
     app = web.Application(client_max_size=6 * 1024 * 1024)  # allow up to ~6 MB uploads
     app.router.add_get("/",                                    handle_index)
+    app.router.add_get("/anatomy-maker",                       handle_anatomy_maker)
     app.router.add_post("/create",                             handle_create)
     # Waiting room routes
     app.router.add_post("/waiting",                            handle_create_waiting)
