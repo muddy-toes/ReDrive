@@ -1185,8 +1185,9 @@ TOUCH_HTML = r"""
   .tool-btn[data-tool="hand"].active    { background:#1e1e1e; border-color:#ffffff; color:#ffffff; }
   .tool-btn[data-tool="stroker"].active { background:#241400; border-color:#ff8800; color:#ff8800; }
   #anatomy-picker {
-    display: flex; gap: 6px; overflow-x: auto; flex-shrink: 0;
+    display: flex; gap: 6px; overflow-x: auto; flex: 1;
     padding: 2px 0 4px; min-height: 70px; align-items: flex-start;
+    min-width: 0;
   }
   .anat-thumb {
     width: 48px; height: 64px; border-radius: 6px; cursor: pointer;
@@ -1272,7 +1273,19 @@ TOUCH_HTML = r"""
   </div>
 </div>
 
-<div id="anatomy-picker"></div>
+<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;padding:2px 0 0">
+  <button id="upload-anat-btn" onclick="triggerAnatUpload()"
+          title="Upload custom anatomy image"
+          style="flex-shrink:0;padding:6px 10px;background:var(--bg3);border:1px solid var(--border);
+                 border-radius:6px;color:var(--fg2);font-size:14px;cursor:pointer;
+                 touch-action:manipulation;white-space:nowrap">
+    &#128228; Upload
+  </button>
+  <div id="anatomy-picker" style="flex:1;min-width:0;display:flex;gap:6px;overflow-x:auto;padding:2px 0 4px;min-height:70px;align-items:flex-start"></div>
+</div>
+<input type="file" id="anat-file-input" accept="image/png,image/jpeg,image/webp"
+       style="display:none" onchange="onAnatFileSelected(this)">
+<div id="anat-upload-status" style="font-size:11px;color:var(--fg2);height:14px;flex-shrink:0"></div>
 
 <div class="info-row">
   <span id="astatus">Tap or drag &middot; Y = position &middot; X = intensity</span>
@@ -1397,21 +1410,98 @@ let anatVariants  = [];
 let currentAnatId = localStorage.getItem('anatId') || 'default';
 let customAnatImg = null;
 
+// ROOM_CODE is injected by the server when serving this page
+const _ROOM_CODE = (typeof ROOM_CODE !== 'undefined') ? ROOM_CODE : null;
+
 async function loadAnatomyList() {
   anatVariants = [
     { id:'default', label:'Default', type:'canvas', drawFn: drawAnatomyDetailed },
     { id:'simple',  label:'Simple',  type:'canvas', drawFn: drawAnatomySimple   },
   ];
   try {
-    const resp = await fetch('/touch_assets/list?type=anatomy');
-    if (resp.ok) {
-      for (const f of await resp.json())
-        anatVariants.push({ id:f, label:f.replace(/\.[^.]+$/, ''), type:'png',
-                            src:'/touch_assets/anatomy/' + encodeURIComponent(f) });
+    if (_ROOM_CODE) {
+      // Use room-scoped anatomy list (includes custom uploads)
+      const resp = await fetch('/room/' + _ROOM_CODE + '/anatomies');
+      if (resp.ok) {
+        const data = await resp.json();
+        // Custom uploads first
+        for (const f of (data.custom || []))
+          anatVariants.unshift({ id:f, label:f.split('/').pop().replace(/\.[^.]+$/, ''),
+                                 type:'png', src:'/touch_assets/anatomy/' + f });
+        // Standard assets
+        for (const f of (data.standard || []))
+          anatVariants.push({ id:f, label:f.replace(/\.[^.]+$/, ''), type:'png',
+                              src:'/touch_assets/anatomy/' + encodeURIComponent(f) });
+      }
+    } else {
+      // Fallback: list from assets endpoint (standalone mode)
+      const resp = await fetch('/touch_assets/list?type=anatomy');
+      if (resp.ok) {
+        for (const f of await resp.json())
+          anatVariants.push({ id:f, label:f.replace(/\.[^.]+$/, ''), type:'png',
+                              src:'/touch_assets/anatomy/' + encodeURIComponent(f) });
+      }
     }
   } catch(_) {}
   buildPicker();
   applyAnatVariant(currentAnatId);
+}
+
+function triggerAnatUpload() {
+  document.getElementById('anat-file-input').click();
+}
+
+async function onAnatFileSelected(input) {
+  const file = input.files && input.files[0];
+  if (!file || !_ROOM_CODE) return;
+  input.value = '';  // reset so same file can be re-selected
+  const statusEl = document.getElementById('anat-upload-status');
+  statusEl.textContent = 'Uploading\u2026';
+  statusEl.style.color = 'var(--fg2)';
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await fetch('/room/' + _ROOM_CODE + '/upload_anatomy', {
+      method: 'POST', body: fd
+    });
+    if (!r.ok) {
+      const txt = await r.text();
+      statusEl.textContent = 'Upload failed: ' + txt;
+      statusEl.style.color = 'var(--err)';
+      setTimeout(() => { statusEl.textContent = ''; }, 3000);
+      return;
+    }
+    const d = await r.json();
+    statusEl.textContent = 'Uploaded!';
+    statusEl.style.color = 'var(--ok)';
+    setTimeout(() => { statusEl.textContent = ''; }, 2000);
+    // Save as base64 for future sessions
+    const reader = new FileReader();
+    reader.onload = e => localStorage.setItem('reDriveAnatomyB64', e.target.result);
+    reader.readAsDataURL(file);
+    localStorage.setItem('reDriveAnatomyName', file.name);
+    _addCustomAnatomy(d.name);
+  } catch(e) {
+    statusEl.textContent = 'Upload error';
+    statusEl.style.color = 'var(--err)';
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+  }
+}
+
+function _addCustomAnatomy(name) {
+  // Add to front if not already present
+  if (anatVariants.some(v => v.id === name)) {
+    selectAnat(name);
+    return;
+  }
+  anatVariants.unshift({
+    id: name,
+    label: name.split('/').pop().replace(/\.[^.]+$/, ''),
+    type: 'png',
+    src: '/touch_assets/anatomy/' + name,
+  });
+  buildPicker();
+  selectAnat(name);
 }
 
 function buildPicker() {
@@ -1874,6 +1964,30 @@ setInterval(async()=>{
 },1500);
 
 loadAnatomyList(); loadToolImages(); draw();
+
+// ── Room WebSocket (anatomy_added + driver_joined messages) ───────────────
+(function connectRoomWS() {
+  if (!_ROOM_CODE) return;
+  const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = wsProto + '//' + location.host + '/room/' + _ROOM_CODE + '/rider';
+  let ws;
+  function connect() {
+    try {
+      ws = new WebSocket(wsUrl);
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.type === 'anatomy_added' && msg.name) {
+            _addCustomAnatomy(msg.name);
+          }
+        } catch(_) {}
+      };
+      ws.onclose = () => { setTimeout(connect, 5000); };
+      ws.onerror = () => { try { ws.close(); } catch(_) {} };
+    } catch(_) { setTimeout(connect, 5000); }
+  }
+  connect();
+})();
 </script>
 <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
 <script>

@@ -17,6 +17,7 @@ import random
 import secrets
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import Optional
 from unittest.mock import MagicMock
@@ -54,19 +55,30 @@ def _new_code() -> str:
 class Room:
     """One driver session with N riders."""
 
-    def __init__(self, code: str, main_loop: asyncio.AbstractEventLoop):
+    def __init__(self, code: str, main_loop: asyncio.AbstractEventLoop,
+                 waiting: bool = False):
         self.code         = code
-        self.driver_key      = secrets.token_urlsafe(20)
+        self.driver_key      = "" if waiting else secrets.token_urlsafe(20)
         self.created_at      = time.monotonic()
         self.driver_last_seen = time.monotonic()   # updated on every valid driver request
         self.bottle_until: float = 0.0
         self.rider_wss:  set[web.WebSocketResponse] = set()
         self._main_loop  = main_loop
         self._log_q      = queue.Queue()
-        cfg              = DriveConfig()   # defaults — no ReStim URL needed
-        self.engine      = DriveEngine(cfg, {}, self._log_q,
+        # Waiting room support
+        self.waiting: bool = waiting
+        self.waiting_expires: float = time.time() + 1800 if waiting else 0.0
+        # Public session list
+        self.public: bool = True
+        # Custom anatomy uploads
+        self.custom_anatomies: list = []
+        if not waiting:
+            cfg          = DriveConfig()   # defaults — no ReStim URL needed
+            self.engine  = DriveEngine(cfg, {}, self._log_q,
                                        send_hook=self._hook)
-        self.engine.start()
+            self.engine.start()
+        else:
+            self.engine  = None
 
     # Called from the engine's background thread — schedule on main loop
     def _hook(self, cmd: str):
@@ -94,7 +106,8 @@ class Room:
         return False
 
     def stop(self):
-        self.engine.stop()
+        if self.engine is not None:
+            self.engine.stop()
 
     @property
     def rider_count(self) -> int:
@@ -450,6 +463,15 @@ _LANDING_HTML = """<!DOCTYPE html>
 </div>
 
 <div class="card">
+  <h2>Rider &mdash; looking for a driver?</h2>
+  <form action="/waiting" method="post">
+    <button type="submit" style="background:linear-gradient(135deg,var(--accent2) 0%,var(--accent) 100%)">Request a Driver &rarr;</button>
+  </form>
+  <p class="note">Creates a waiting room. Share the invite link with your driver &mdash; they'll be redirected straight into control.</p>
+  <div id="waiting-list" style="margin-top:1rem"></div>
+</div>
+
+<div class="card">
   <h2>Rider &mdash; join a room</h2>
   <input id="code-in" placeholder="Enter room code" maxlength="10"
          oninput="this.value=this.value.toUpperCase().replace(/[^BCDFGHJKMNPQRSTVWXYZ23456789]/g,'')">
@@ -459,6 +481,11 @@ _LANDING_HTML = """<!DOCTYPE html>
     or <a href="/download/mac" style="color:var(--accent)">macOS</a> &mdash; or run
     <code>python rider_client.py &lt;ROOMCODE&gt;</code> directly if you have Python.
   </p>
+</div>
+
+<div class="card" id="live-sessions-card">
+  <h2>Join a live session</h2>
+  <div id="live-sessions-list"><span style="color:var(--fg2);font-size:.9rem">Loading&#8230;</span></div>
 </div>
 
 <footer class="site-footer">
@@ -473,6 +500,75 @@ function joinRider(){
   if(c.length === 10) window.location = '/room/' + c + '/join';
   else alert('Enter a 10-character room code');
 }
+
+// ── Waiting room list (driver side) ──────────────────────────────────────────
+async function refreshWaiting() {
+  try {
+    const resp = await fetch('/api/waiting');
+    const rooms = await resp.json();
+    const el = document.getElementById('waiting-list');
+    if (!rooms.length) { el.innerHTML = ''; return; }
+    let html = '<div style="font-size:.78rem;color:var(--fg2);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.5rem">Pending waiting rooms</div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:.9rem">';
+    for (const r of rooms) {
+      const mins = Math.floor(r.expires_in / 60), secs = r.expires_in % 60;
+      const timeStr = mins + 'm ' + String(secs).padStart(2,'0') + 's remaining';
+      html += `<tr style="border-top:1px solid var(--border)">
+        <td style="padding:.5rem .3rem;font-family:monospace;color:var(--accent)">${r.code}</td>
+        <td style="padding:.5rem .3rem;color:var(--fg2);font-size:.82rem">${timeStr}</td>
+        <td style="padding:.5rem .3rem;text-align:right">
+          <a href="/waiting/${r.code}/claim"
+             style="color:var(--accent);text-decoration:none;font-size:.82rem;
+                    border:1px solid var(--accent);padding:2px 8px;border-radius:4px">
+            Claim as Driver &rarr;</a>
+        </td>
+      </tr>`;
+    }
+    html += '</table>';
+    el.innerHTML = html;
+  } catch(_) {}
+}
+refreshWaiting();
+setInterval(refreshWaiting, 10000);
+
+// ── Public live sessions ──────────────────────────────────────────────────────
+async function refreshPublicRooms() {
+  try {
+    const resp = await fetch('/api/rooms');
+    const rooms = await resp.json();
+    const el = document.getElementById('live-sessions-list');
+    if (!rooms.length) {
+      el.innerHTML = '<span style="color:var(--fg2);font-size:.9rem">No public sessions running right now</span>';
+      return;
+    }
+    let html = '<table style="width:100%;border-collapse:collapse;font-size:.9rem">';
+    html += '<thead><tr style="border-bottom:1px solid var(--border)">' +
+      '<th style="text-align:left;padding:.4rem .3rem;color:var(--fg2);font-size:.78rem;font-weight:500">Room</th>' +
+      '<th style="text-align:left;padding:.4rem .3rem;color:var(--fg2);font-size:.78rem;font-weight:500">Riders</th>' +
+      '<th style="text-align:left;padding:.4rem .3rem;color:var(--fg2);font-size:.78rem;font-weight:500">Running</th>' +
+      '<th></th></tr></thead><tbody>';
+    for (const r of rooms) {
+      html += `<tr style="border-top:1px solid var(--border)">
+        <td style="padding:.5rem .3rem;font-family:monospace;color:var(--accent)">${r.code}</td>
+        <td style="padding:.5rem .3rem;color:var(--fg2)">${r.riders}</td>
+        <td style="padding:.5rem .3rem;color:var(--fg2)">${r.age_minutes}m</td>
+        <td style="padding:.5rem .3rem;text-align:right">
+          <a href="/room/${r.code}/touch"
+             style="color:#000;background:var(--accent);text-decoration:none;
+                    font-size:.82rem;font-weight:700;padding:3px 10px;border-radius:4px">
+            Join as Rider</a>
+        </td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  } catch(_) {
+    document.getElementById('live-sessions-list').innerHTML =
+      '<span style="color:var(--fg2);font-size:.9rem">Could not load session list</span>';
+  }
+}
+refreshPublicRooms();
+setInterval(refreshPublicRooms, 30000);
 </script>
 <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
 <script>
@@ -536,6 +632,8 @@ async def handle_room_driver(req):
               style="padding:3px 8px;background:#222;border:1px solid #444;color:#ccc;border-radius:4px;cursor:pointer;font-size:11px">&#128279; Rider link</button>
       <button id="btn-touch" onclick="rdCopy('touch')" title="Copy touch link"
               style="padding:3px 8px;background:#222;border:1px solid #444;color:#ccc;border-radius:4px;cursor:pointer;font-size:11px">&#127918; Touch link</button>
+      <button id="btn-privacy" onclick="rdTogglePrivacy()" title="Toggle public/private session"
+              style="padding:3px 8px;background:#222;border:1px solid #444;color:#ccc;border-radius:4px;cursor:pointer;font-size:11px">&#127760; Public</button>
     </div>
     <span id="rider-ct" style="color:#666;margin-left:auto;font-size:12px;white-space:nowrap">0 riders</span>
   </div>
@@ -546,6 +644,7 @@ const _RC="{code}";
 const _BASE=location.origin+"{prefix}";
 const _RIDER_URL=_BASE;
 const _TOUCH_URL=_BASE+"/touch";
+let _isPublic = true;
 function rdFlash(btnId){{
   const btn=document.getElementById(btnId);
   if(!btn) return;
@@ -563,6 +662,18 @@ function rdCopy(type){{
   else               {{ text=_TOUCH_URL;  btnId='btn-touch'; }}
   navigator.clipboard.writeText(text).then(()=>rdFlash(btnId));
 }}
+async function rdTogglePrivacy(){{
+  try{{
+    const r=await fetch('{prefix}/privacy',{{method:'POST'}});
+    if(!r.ok) return;
+    const d=await r.json();
+    _isPublic=d.public;
+    const btn=document.getElementById('btn-privacy');
+    btn.textContent=_isPublic?'&#127760; Public':'&#128274; Private';
+    btn.style.color=_isPublic?'#4caf50':'#ff9800';
+    btn.style.borderColor=_isPublic?'#4caf50':'#ff9800';
+  }}catch(_){{}}
+}}
 setInterval(async()=>{{
   try{{const d=await(await fetch('{prefix}/state')).json();
   document.getElementById('rider-ct').textContent=d.rider_count+' rider'+(d.rider_count===1?'':'s');}}catch{{}}
@@ -579,6 +690,9 @@ async def handle_room_touch(req):
         raise web.HTTPNotFound(text="Room not found or expired")
     prefix = f"/room/{code}"
     html   = _inject_prefix(TOUCH_HTML, prefix)
+    # Inject ROOM_CODE constant before any other scripts (into <head>)
+    head_script = f'<script>const ROOM_CODE="{code}";</script>\n'
+    html = html.replace("<head>", "<head>" + head_script, 1)
     # Show room code button in touch page
     code_script = (
         f'<script>'
@@ -695,10 +809,19 @@ async def handle_assets_list(req):
 
 async def handle_assets_file(req):
     type_ = req.match_info["type"]
-    name  = req.match_info["name"]
-    if "/" in type_ or ".." in type_ or "/" in name or ".." in name:
+    name  = req.match_info.get("name", "")
+    subdir = req.match_info.get("subdir", "")
+    if "/" in type_ or ".." in type_ or ".." in name or ".." in subdir:
         raise web.HTTPForbidden()
-    path = Path(__file__).parent.parent / "touch_assets" / type_ / name
+    if subdir:
+        # Allow exactly one level of subdirectory (e.g. _uploads)
+        if "/" in subdir:
+            raise web.HTTPForbidden()
+        path = Path(__file__).parent.parent / "touch_assets" / type_ / subdir / name
+    else:
+        if "/" in name:
+            raise web.HTTPForbidden()
+        path = Path(__file__).parent.parent / "touch_assets" / type_ / name
     if not path.is_file():
         raise web.HTTPNotFound()
     ct = {".png": "image/png", ".jpg": "image/jpeg",
@@ -750,41 +873,419 @@ async def handle_bottle_png(_req):
     return web.Response(body=path.read_bytes(), content_type="image/png")
 
 
+# ── Waiting room handlers ─────────────────────────────────────────────────────
+
+_WAITING_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ReDrive &middot; Waiting for Driver</title>
+<style>
+  :root {{ --bg:#0e0e10; --bg2:#18181c; --bg3:#222228; --border:#2a2a32;
+          --fg:#f0f0f5; --fg2:#8888a0; --accent:#5fa3ff; --accent2:#a855f7;
+          --ok:#4caf50; --warn:#ff9800; }}
+  * {{ box-sizing:border-box; margin:0; padding:0 }}
+  body {{ background:var(--bg); color:var(--fg); font:15px/1.5 system-ui,sans-serif;
+         display:flex; flex-direction:column; align-items:center;
+         min-height:100vh; padding:2rem }}
+  .card {{ background:var(--bg2); border:1px solid var(--border); border-radius:10px;
+          padding:2rem 2.5rem; width:100%; max-width:420px; margin-bottom:1.5rem;
+          text-align:center }}
+  h1 {{ font-size:1.8rem; margin-bottom:.5rem;
+        background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%);
+        -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+        background-clip:text }}
+  .sub {{ color:var(--fg2); font-size:.9rem; margin-bottom:1.5rem }}
+  .code-display {{ font-size:2.6rem; font-weight:900; letter-spacing:.18em;
+                   color:var(--accent); font-family:monospace; margin:1rem 0 }}
+  @keyframes pulse {{
+    0%,100% {{ opacity:1; transform:scale(1) }}
+    50%      {{ opacity:.6; transform:scale(0.97) }}
+  }}
+  .waiting-label {{ animation:pulse 2s ease-in-out infinite; color:var(--fg2);
+                    font-size:1rem; margin-bottom:1rem }}
+  .btn {{ display:inline-block; padding:.7rem 1.5rem;
+          background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%);
+          color:#fff; border:none; border-radius:6px; font-size:.95rem; font-weight:700;
+          cursor:pointer; transition:opacity .15s; text-decoration:none; margin:.3rem }}
+  .btn:hover {{ opacity:.85 }}
+  .btn-outline {{ background:none; border:1px solid var(--border); color:var(--fg2) }}
+  .btn-outline:hover {{ border-color:var(--accent); color:var(--accent) }}
+  .invite-link {{ background:var(--bg3); border:1px solid var(--border); border-radius:6px;
+                  padding:.6rem 1rem; font-size:.82rem; color:var(--accent); font-family:monospace;
+                  word-break:break-all; margin:.8rem 0 }}
+  #countdown {{ font-size:.85rem; color:var(--fg2); margin-top:.8rem }}
+  .site-footer {{ color:var(--fg2); font-size:.8rem; margin-top:2rem }}
+  .site-footer a {{ color:var(--accent); text-decoration:none }}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>ReDrive</h1>
+  <p class="sub">Share the driver invite link below</p>
+  <div class="waiting-label">&#9679; Waiting for a driver&#8230;</div>
+  <div class="code-display">{code}</div>
+  <div class="invite-link" id="invite-link">{invite_url}</div>
+  <div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;margin-top:.5rem">
+    <button class="btn" onclick="copyInvite()">&#128203; Copy driver invite link</button>
+    <a class="btn btn-outline" href="/">&#8592; Back</a>
+  </div>
+  <div id="countdown">Expires in <span id="cd-timer">30:00</span></div>
+</div>
+
+<footer class="site-footer">
+  <a href="https://www.estimstation.com">estimstation.com</a> &middot; ReDrive
+</footer>
+
+<script>
+const CODE = "{code}";
+const STATUS_URL = "/waiting/" + CODE + "/status";
+const INVITE_URL = "{invite_url}";
+const EXPIRES_AT = Date.now() + {ms_remaining};
+
+function copyInvite() {{
+  navigator.clipboard.writeText(INVITE_URL).then(() => {{
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = "Copied!";
+    btn.style.background = "var(--ok)";
+    setTimeout(() => {{ btn.textContent = orig; btn.style.background = ""; }}, 1500);
+  }});
+}}
+
+// Countdown timer
+function updateCountdown() {{
+  const ms = EXPIRES_AT - Date.now();
+  if (ms <= 0) {{
+    document.getElementById('cd-timer').textContent = "Expired";
+    return;
+  }}
+  const mins = Math.floor(ms / 60000);
+  const secs = Math.floor((ms % 60000) / 1000);
+  document.getElementById('cd-timer').textContent =
+    mins + ":" + String(secs).padStart(2, "0");
+}}
+setInterval(updateCountdown, 1000);
+updateCountdown();
+
+// Poll for driver claim
+async function pollStatus() {{
+  try {{
+    const d = await (await fetch(STATUS_URL)).json();
+    if (d.claimed && d.touch_url) {{
+      window.location = d.touch_url;
+      return;
+    }}
+  }} catch(_) {{}}
+  setTimeout(pollStatus, 3000);
+}}
+pollStatus();
+</script>
+</body>
+</html>
+"""
+
+
+async def handle_create_waiting(req):
+    """Rider creates a waiting room — no driver key yet."""
+    code = _new_code()
+    loop = asyncio.get_event_loop()
+    room = Room(code, loop, waiting=True)
+    _rooms[code] = room
+    print(f"[room] waiting created {code}  (total: {len(_rooms)})")
+    raise web.HTTPFound(f"/waiting/{code}")
+
+
+async def handle_waiting_page(req):
+    code = req.match_info["code"]
+    room = _rooms.get(code)
+    if room is None or not room.waiting:
+        raise web.HTTPNotFound(text="Waiting room not found or expired")
+    if time.time() > room.waiting_expires:
+        raise web.HTTPNotFound(text="Waiting room has expired")
+    ms_remaining = max(0, int((room.waiting_expires - time.time()) * 1000))
+    base = req.url.origin()
+    invite_url = f"{base}/waiting/{code}/claim"
+    html = _WAITING_HTML.format(
+        code=code,
+        invite_url=invite_url,
+        ms_remaining=ms_remaining,
+    )
+    return web.Response(text=html, content_type="text/html")
+
+
+async def handle_waiting_status(req):
+    code = req.match_info["code"]
+    room = _rooms.get(code)
+    if room is None:
+        return web.Response(text=json.dumps({"claimed": True, "touch_url": None}),
+                            content_type="application/json")
+    if room.waiting:
+        if time.time() > room.waiting_expires:
+            return web.Response(text=json.dumps({"claimed": False, "touch_url": None,
+                                                  "expired": True}),
+                                content_type="application/json")
+        return web.Response(text=json.dumps({"claimed": False, "touch_url": None}),
+                            content_type="application/json")
+    # Room exists and is no longer a waiting room — driver has claimed it
+    return web.Response(
+        text=json.dumps({"claimed": True, "touch_url": f"/room/{code}/touch"}),
+        content_type="application/json")
+
+
+async def handle_waiting_claim(req):
+    """Driver visits this URL to claim a waiting room."""
+    code = req.match_info["code"]
+    room = _rooms.get(code)
+    if room is None:
+        raise web.HTTPNotFound(text="Waiting room not found or already claimed")
+    if not room.waiting:
+        raise web.HTTPNotFound(text="Waiting room already claimed")
+    if time.time() > room.waiting_expires:
+        raise web.HTTPNotFound(text="Waiting room has expired")
+
+    # Promote waiting room to a real room
+    room.driver_key = secrets.token_urlsafe(20)
+    room.waiting = False
+    room.waiting_expires = 0.0
+    room.driver_last_seen = time.monotonic()
+    cfg = DriveConfig()
+    room._log_q = queue.Queue()
+    room.engine = DriveEngine(cfg, {}, room._log_q, send_hook=room._hook)
+    room.engine.start()
+
+    # Broadcast to any connected WebSocket riders
+    msg = json.dumps({"type": "driver_joined"})
+    dead = set()
+    for ws in list(room.rider_wss):
+        try:
+            await ws.send_str(msg)
+        except Exception:
+            dead.add(ws)
+    room.rider_wss -= dead
+
+    print(f"[room] waiting claimed {code}  (total: {len(_rooms)})")
+    raise web.HTTPFound(f"/room/{code}?key={room.driver_key}")
+
+
+# ── Public session list + privacy ─────────────────────────────────────────────
+
+async def handle_api_rooms(req):
+    """Return JSON list of public, non-waiting, active rooms."""
+    now = time.monotonic()
+    result = []
+    for code, room in _rooms.items():
+        if room.waiting:
+            continue
+        if not room.public:
+            continue
+        age_min = int((now - room.created_at) / 60)
+        result.append({
+            "code": code,
+            "riders": room.rider_count,
+            "age_minutes": age_min,
+        })
+    return web.Response(text=json.dumps(result), content_type="application/json")
+
+
+async def handle_api_waiting(req):
+    """Return JSON list of active waiting rooms (for driver claiming)."""
+    now_wall = time.time()
+    result = []
+    for code, room in _rooms.items():
+        if not room.waiting:
+            continue
+        if now_wall > room.waiting_expires:
+            continue
+        expires_in = max(0, int(room.waiting_expires - now_wall))
+        result.append({"code": code, "expires_in": expires_in})
+    return web.Response(text=json.dumps(result), content_type="application/json")
+
+
+async def handle_room_privacy(req):
+    """Toggle room.public. Requires X-Driver-Key header."""
+    code = req.match_info["code"]
+    room = _rooms.get(code)
+    if room is None:
+        raise web.HTTPNotFound(text="Room not found or expired")
+    if not _check_driver_key(req, room):
+        raise web.HTTPForbidden(text="Invalid driver key")
+    room.public = not room.public
+    return web.Response(text=json.dumps({"public": room.public}),
+                        content_type="application/json")
+
+
+# ── Anatomy upload ────────────────────────────────────────────────────────────
+
+_MAX_ANATOMY_BYTES = 5 * 1024 * 1024  # 5 MB
+_ALLOWED_ANATOMY_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+
+
+async def handle_anatomy_upload(req):
+    code = req.match_info["code"]
+    room = _rooms.get(code)
+    if room is None:
+        raise web.HTTPNotFound(text="Room not found or expired")
+
+    try:
+        reader = await req.multipart()
+        field = await reader.next()
+        if field is None or field.name != "file":
+            raise web.HTTPBadRequest(text="Missing file field")
+
+        # Read with size cap
+        chunks = []
+        total = 0
+        while True:
+            chunk = await field.read_chunk(8192)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > _MAX_ANATOMY_BYTES:
+                raise web.HTTPRequestEntityTooLarge(
+                    max_size=_MAX_ANATOMY_BYTES, actual_size=total)
+            chunks.append(chunk)
+        data = b"".join(chunks)
+    except web.HTTPException:
+        raise
+    except Exception as e:
+        raise web.HTTPBadRequest(text=f"Upload error: {e}")
+
+    # Detect extension from content-type or filename
+    ct = field.headers.get("Content-Type", "")
+    ext_map = {"image/png": ".png", "image/jpeg": ".jpg",
+               "image/webp": ".webp"}
+    suffix = ext_map.get(ct, "")
+    if not suffix:
+        fname = field.filename or ""
+        suffix = Path(fname).suffix.lower()
+    if suffix not in _ALLOWED_ANATOMY_SUFFIXES:
+        raise web.HTTPUnsupportedMediaType(text="File must be PNG, JPG, or WEBP")
+
+    # Save file
+    uploads_dir = (Path(__file__).parent.parent
+                   / "touch_assets" / "anatomy" / "_uploads")
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    short_id = uuid.uuid4().hex[:8]
+    filename = f"{code}_{short_id}{suffix}"
+    (uploads_dir / filename).write_bytes(data)
+
+    rel_name = f"_uploads/{filename}"
+    room.custom_anatomies.append(rel_name)
+
+    # Broadcast to room WebSocket connections
+    msg = json.dumps({"type": "anatomy_added", "name": rel_name})
+    dead = set()
+    for ws in list(room.rider_wss):
+        try:
+            await ws.send_str(msg)
+        except Exception:
+            dead.add(ws)
+    room.rider_wss -= dead
+
+    return web.Response(text=json.dumps({"ok": True, "name": rel_name}),
+                        content_type="application/json")
+
+
+async def handle_room_anatomies(req):
+    """Return custom anatomies for this room + standard anatomy list."""
+    code = req.match_info["code"]
+    room = _rooms.get(code)
+    if room is None:
+        raise web.HTTPNotFound(text="Room not found or expired")
+
+    anatomy_dir = Path(__file__).parent.parent / "touch_assets" / "anatomy"
+    anatomy_dir.mkdir(parents=True, exist_ok=True)
+    standard = sorted(
+        f.name for f in anatomy_dir.iterdir()
+        if f.is_file() and f.suffix.lower() in _ALLOWED_ANATOMY_SUFFIXES
+    )
+    return web.Response(
+        text=json.dumps({"custom": room.custom_anatomies, "standard": standard}),
+        content_type="application/json"
+    )
+
+
 # ── Room expiry cleanup ──────────────────────────────────────────────────────
+
+def _delete_room_uploads(code: str):
+    """Delete anatomy upload files belonging to a room."""
+    uploads_dir = (Path(__file__).parent.parent
+                   / "touch_assets" / "anatomy" / "_uploads")
+    if not uploads_dir.is_dir():
+        return
+    prefix = f"{code}_"
+    for f in list(uploads_dir.iterdir()):
+        if f.is_file() and f.name.startswith(prefix):
+            try:
+                f.unlink()
+            except Exception:
+                pass
+
 
 async def _cleanup_loop():
     while True:
         await asyncio.sleep(_CLEANUP_INTERVAL)
-        now = time.monotonic()
+        now_mono = time.monotonic()
+        now_wall = time.time()
         for code, room in list(_rooms.items()):
-            if now - room.created_at > _ROOM_EXPIRY:
+            # Expired waiting rooms (wall-clock based)
+            if room.waiting and now_wall > room.waiting_expires:
+                _rooms.pop(code)
+                _delete_room_uploads(code)
+                print(f"[room] waiting expired  {code}  (total: {len(_rooms)})")
+                continue
+            # Skip waiting rooms from normal expiry checks
+            if room.waiting:
+                continue
+            if now_mono - room.created_at > _ROOM_EXPIRY:
                 _rooms.pop(code).stop()
+                _delete_room_uploads(code)
                 print(f"[room] expired (24h)  {code}  (total: {len(_rooms)})")
-            elif now - room.driver_last_seen > _DRIVER_GRACE:
+            elif now_mono - room.driver_last_seen > _DRIVER_GRACE:
                 _rooms.pop(code).stop()
+                _delete_room_uploads(code)
                 print(f"[room] expired (driver gone 5m)  {code}  (total: {len(_rooms)})")
 
 
 # ── App factory ──────────────────────────────────────────────────────────────
 
 def build_app() -> web.Application:
-    app = web.Application()
-    app.router.add_get("/",                           handle_index)
-    app.router.add_post("/create",                    handle_create)
-    app.router.add_get("/room/{code}",                handle_room_driver)
-    app.router.add_get("/room/{code}/touch",          handle_room_touch)
-    app.router.add_get("/room/{code}/join",           handle_room_join)
-    app.router.add_post("/room/{code}/command",       handle_room_command)
-    app.router.add_get("/room/{code}/state",          handle_room_state)
-    app.router.add_post("/room/{code}/bottle",        handle_room_bottle)
-    app.router.add_get("/room/{code}/rider",          handle_rider_ws)
-    app.router.add_post("/room/{code}/ping",          handle_driver_ping)
-    app.router.add_get("/bottle.png",                 handle_bottle_png)
-    app.router.add_get("/touch_assets/list",          handle_assets_list)
-    app.router.add_get("/touch_assets/{type}/{name}", handle_assets_file)
-    app.router.add_get("/version.json",               handle_version)
-    app.router.add_get("/download/rider/{platform}",  handle_rider_download)
-    app.router.add_get("/download/{platform}",        handle_download)
+    app = web.Application(client_max_size=6 * 1024 * 1024)  # allow up to ~6 MB uploads
+    app.router.add_get("/",                                    handle_index)
+    app.router.add_post("/create",                             handle_create)
+    # Waiting room routes
+    app.router.add_post("/waiting",                            handle_create_waiting)
+    app.router.add_get("/waiting/{code}",                      handle_waiting_page)
+    app.router.add_get("/waiting/{code}/status",               handle_waiting_status)
+    app.router.add_get("/waiting/{code}/claim",                handle_waiting_claim)
+    # Public session list
+    app.router.add_get("/api/rooms",                           handle_api_rooms)
+    app.router.add_get("/api/waiting",                         handle_api_waiting)
+    # Room routes
+    app.router.add_get("/room/{code}",                         handle_room_driver)
+    app.router.add_get("/room/{code}/touch",                   handle_room_touch)
+    app.router.add_get("/room/{code}/join",                    handle_room_join)
+    app.router.add_post("/room/{code}/command",                handle_room_command)
+    app.router.add_get("/room/{code}/state",                   handle_room_state)
+    app.router.add_post("/room/{code}/bottle",                 handle_room_bottle)
+    app.router.add_get("/room/{code}/rider",                   handle_rider_ws)
+    app.router.add_post("/room/{code}/ping",                   handle_driver_ping)
+    app.router.add_post("/room/{code}/privacy",                handle_room_privacy)
+    # Anatomy upload
+    app.router.add_post("/room/{code}/upload_anatomy",         handle_anatomy_upload)
+    app.router.add_get("/room/{code}/anatomies",               handle_room_anatomies)
+    # Static assets
+    app.router.add_get("/bottle.png",                          handle_bottle_png)
+    app.router.add_get("/touch_assets/list",                   handle_assets_list)
+    app.router.add_get("/touch_assets/{type}/{subdir}/{name}", handle_assets_file)
+    app.router.add_get("/touch_assets/{type}/{name}",          handle_assets_file)
+    app.router.add_get("/version.json",                        handle_version)
+    app.router.add_get("/download/rider/{platform}",           handle_rider_download)
+    app.router.add_get("/download/{platform}",                 handle_download)
+
     async def _start_cleanup(_app):
         asyncio.ensure_future(_cleanup_loop())
 
