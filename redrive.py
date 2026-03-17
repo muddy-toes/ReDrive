@@ -616,6 +616,8 @@ DRIVER_HTML = r"""<!DOCTYPE html>
   </button>
 </div>
 
+<div id="participants-panel" style="display:none;align-items:flex-end;gap:0;margin:8px 0 4px;min-height:0"></div>
+
 <div id="live"></div>
 
 <script>
@@ -1050,6 +1052,59 @@ async function pollState() {
 setInterval(pollState, 350);
 pollState();
 
+// ── Driver name ────────────────────────────────────────────────────────────
+let _driverNameTimer = null;
+function setDriverName(val) {
+  clearTimeout(_driverNameTimer);
+  _driverNameTimer = setTimeout(() => {
+    sendCmd({set_driver_name: val.trim()});
+    localStorage.setItem('reDriveDriverName', val.trim());
+  }, 600);
+}
+(function initDriverName() {
+  const saved = localStorage.getItem('reDriveDriverName') || '';
+  if (saved) {
+    const inp = document.getElementById('driver-name-input');
+    if (inp) inp.value = saved;
+    // Send on load so server knows the name
+    if (saved) sendCmd({set_driver_name: saved});
+  }
+})();
+
+// ── Participant avatars ─────────────────────────────────────────────────────
+function renderParticipants(data) {
+  const panel = document.getElementById('participants-panel');
+  if (!panel) return;
+  const parts = data.participants || [];
+  if (!parts.length) { panel.style.display = 'none'; return; }
+  panel.style.display = 'flex';
+  panel.innerHTML = parts.map((p, i) => {
+    const url = p.anatomy ? '/touch_assets/anatomy/' + p.anatomy.split('/').map(encodeURIComponent).join('/') : '';
+    const bg = url ? 'background-image:url(\'' + url + '\');background-size:cover;background-position:top center' : 'background:#222';
+    return '<div style="width:36px;height:90px;border-radius:6px;border:1px solid #2a2a2a;' +
+      bg + ';position:relative;flex-shrink:0;margin-left:' + (i === 0 ? '0' : '-8px') + ';z-index:' + i + '">' +
+      '<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.65);' +
+      'font-size:8px;color:#ccc;text-align:center;padding:2px;border-radius:0 0 5px 5px;' +
+      'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + p.name + '</div>' +
+      '</div>';
+  }).join('');
+}
+
+(function initParticipantsPoll() {
+  // Extract room code from current URL path /room/CODE?key=...
+  const m = window.location.pathname.match(/\/room\/([^/]+)/);
+  if (!m) return;
+  const roomCode = m[1];
+  async function fetchParticipants() {
+    try {
+      const d = await (await fetch('/room/' + roomCode + '/participants')).json();
+      renderParticipants(d);
+    } catch(_) {}
+  }
+  fetchParticipants();
+  setInterval(fetchParticipants, 5000);
+})();
+
 function toggleTouchPanel() {
   const panel = document.getElementById('touch-panel');
   if (panel.style.bottom === '0px') { closeTouchPanel(); } else { openTouchPanel(); }
@@ -1225,8 +1280,14 @@ TOUCH_HTML = r"""
     border:1px solid #2a2a2a;border-radius:4px;color:#5fa3ff;font-size:11px;
     font-family:monospace;letter-spacing:.1em;cursor:pointer;white-space:nowrap"
     onclick="touchCopyCode(this)" title="Tap to copy room code"></button>
+  <input id="rider-name-input" placeholder="Your name" maxlength="30"
+    style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:5px;
+           color:#fff;font-size:11px;padding:3px 7px;width:110px;flex-shrink:0">
   <button id="nav-link" onclick="if(window.parent!==window){window.parent.postMessage('close-touch','*');}else{window.location='/';}">Main &#8599;</button>
 </div>
+<div id="driven-by" style="display:none;text-align:center;font-size:11px;
+  color:#888;padding:2px 0 4px">Driven by <strong id="driven-by-name" style="color:#5fa3ff"></strong></div>
+<div id="riders-panel" style="display:flex;justify-content:center;gap:0;margin:2px 0 4px"></div>
 <div id="bottle-row">
   <span style="font-size:10px;color:var(--fg2);white-space:nowrap">Poppers</span>
   <input type="range" id="bottle-dur" min="5" max="15" value="10" style="flex:1"
@@ -2009,24 +2070,80 @@ setInterval(async()=>{
 
 loadAnatomyList(); loadToolImages(); draw(); autoUploadStoredAnatomy();
 
-// ── Room WebSocket (anatomy_added + driver_joined messages) ───────────────
+// ── Rider name input ───────────────────────────────────────────────────────
+let _riderWs = null;
+let _riderNameTimer = null;
+(function initRiderName() {
+  const inp = document.getElementById('rider-name-input');
+  if (!inp) return;
+  const saved = localStorage.getItem('reDriveRiderName') || '';
+  if (saved) inp.value = saved;
+  inp.addEventListener('input', () => {
+    const val = inp.value;
+    localStorage.setItem('reDriveRiderName', val);
+    clearTimeout(_riderNameTimer);
+    _riderNameTimer = setTimeout(() => {
+      if (_riderWs && _riderWs.readyState === WebSocket.OPEN) {
+        _riderWs.send(JSON.stringify({type: 'set_name', name: val.trim()}));
+      }
+    }, 600);
+  });
+})();
+
+function renderRidersPanel(data) {
+  const panel = document.getElementById('riders-panel');
+  if (!panel) return;
+  const parts = (data.participants || []);
+  if (!parts.length) { panel.style.display = 'none'; return; }
+  panel.style.display = 'flex';
+  panel.innerHTML = parts.map((p, i) => {
+    const url = p.anatomy ? '/touch_assets/anatomy/' + p.anatomy.split('/').map(encodeURIComponent).join('/') : '';
+    const bg = url ? 'background-image:url(\'' + url + '\');background-size:cover;background-position:top center' : 'background:#222';
+    return '<div style="width:28px;height:70px;border-radius:6px;border:1px solid #2a2a2a;' +
+      bg + ';position:relative;flex-shrink:0;margin-left:' + (i === 0 ? '0' : '-6px') + ';z-index:' + i + '">' +
+      '<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.65);' +
+      'font-size:7px;color:#ccc;text-align:center;padding:1px;border-radius:0 0 5px 5px;' +
+      'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + p.name + '</div>' +
+      '</div>';
+  }).join('');
+}
+
+// ── Room WebSocket (anatomy_added + driver_joined + participants_update) ───
 (function connectRoomWS() {
   if (!_ROOM_CODE) return;
   const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = wsProto + '//' + location.host + '/room/' + _ROOM_CODE + '/rider';
-  let ws;
   function connect() {
     try {
-      ws = new WebSocket(wsUrl);
+      const ws = new WebSocket(wsUrl);
+      _riderWs = ws;
+      ws.onopen = () => {
+        // Send saved name immediately on connect
+        const savedName = localStorage.getItem('reDriveRiderName') || '';
+        if (savedName) ws.send(JSON.stringify({type: 'set_name', name: savedName}));
+      };
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
           if (msg.type === 'anatomy_added' && msg.name) {
             _addCustomAnatomy(msg.name);
+          } else if (msg.type === 'participants_update') {
+            // Driven-by banner
+            const dbDiv = document.getElementById('driven-by');
+            const dbName = document.getElementById('driven-by-name');
+            if (dbDiv && dbName) {
+              if (msg.driver_name) {
+                dbName.textContent = msg.driver_name;
+                dbDiv.style.display = 'block';
+              } else {
+                dbDiv.style.display = 'none';
+              }
+            }
+            renderRidersPanel(msg);
           }
         } catch(_) {}
       };
-      ws.onclose = () => { setTimeout(connect, 5000); };
+      ws.onclose = () => { _riderWs = null; setTimeout(connect, 5000); };
       ws.onerror = () => { try { ws.close(); } catch(_) {} };
     } catch(_) { setTimeout(connect, 5000); }
   }
@@ -2161,11 +2278,18 @@ class DriveEngine:
         return web.Response(body=path.read_bytes(), content_type=ct)
 
 
+    async def _handle_command_data(self, cmd: dict):
+        """Process an already-parsed command dict (called by server.py relay)."""
+        return await self._process_command(cmd)
+
     async def _handle_command(self, req):
         try:
             cmd = await req.json()
         except Exception:
             return web.Response(status=400)
+        return await self._process_command(cmd)
+
+    async def _process_command(self, cmd: dict):
 
         if cmd.get("stop"):
             self._pattern.stop()

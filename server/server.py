@@ -72,6 +72,12 @@ class Room:
         self.public: bool = True
         # Custom anatomy uploads
         self.custom_anatomies: list = []
+        # Participant tracking
+        self.driver_name: str = ""
+        self.participants: dict = {}       # keyed by ws id: {name, anatomy, role, idx}
+        self._rider_counter: int = 0       # increments for each new rider
+        # Driver WebSocket connections (for participants_update broadcast)
+        self.driver_wss: set[web.WebSocketResponse] = set()
         if not waiting:
             cfg          = DriveConfig()   # defaults — no ReStim URL needed
             self.engine  = DriveEngine(cfg, {}, self._log_q,
@@ -92,6 +98,38 @@ class Room:
             except Exception:
                 dead.add(ws)
         self.rider_wss -= dead
+
+    def _pick_anatomy(self, idx: int) -> str:
+        """Pick an anatomy for a new rider based on their index."""
+        if self.custom_anatomies:
+            return self.custom_anatomies[0]
+        anatomy_dir = Path(__file__).parent.parent / "touch_assets" / "anatomy"
+        files = sorted(
+            f.name for f in anatomy_dir.iterdir()
+            if f.is_file() and f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")
+            and not f.name.startswith("_")
+        ) if anatomy_dir.is_dir() else []
+        if not files:
+            return ""
+        return files[(idx - 1) % len(files)]
+
+    async def _broadcast_participants(self):
+        """Send participants_update to all connected WebSockets (driver + riders)."""
+        parts = list(self.participants.values())
+        msg = json.dumps({
+            "type": "participants_update",
+            "participants": parts,
+            "driver_name": self.driver_name,
+        })
+        dead = set()
+        all_wss = list(self.rider_wss) + list(self.driver_wss)
+        for ws in all_wss:
+            try:
+                await ws.send_str(msg)
+            except Exception:
+                dead.add(ws)
+        self.rider_wss -= dead
+        self.driver_wss -= dead
 
     def touch_driver(self):
         self.driver_last_seen = time.monotonic()
@@ -698,6 +736,10 @@ async def handle_room_driver(req):
               style="padding:3px 8px;background:#222;border:1px solid #444;color:#ccc;border-radius:4px;cursor:pointer;font-size:11px">&#127760; Public</button>
     </div>
     <span id="rider-ct" style="color:#666;margin-left:auto;font-size:12px;white-space:nowrap">0 riders</span>
+    <input id="driver-name-input" placeholder="Your name (optional)" maxlength="30"
+      style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:5px;color:#fff;
+             font-size:12px;padding:4px 8px;width:160px;flex-shrink:0"
+      oninput="setDriverName(this.value)">
   </div>
 </div>
 <div style="height:44px"></div>
@@ -784,7 +826,18 @@ async def handle_room_command(req):
     if not _check_driver_key(req, room):
         raise web.HTTPForbidden(text="Invalid driver key")
     room.touch_driver()
-    return await room.engine._handle_command(req)
+    # Intercept set_driver_name before passing to engine
+    try:
+        body = await req.read()
+        cmd = json.loads(body)
+    except Exception:
+        return web.Response(status=400)
+    if "set_driver_name" in cmd:
+        room.driver_name = str(cmd["set_driver_name"])[:30]
+        await room._broadcast_participants()
+        return web.Response(text="{}", content_type="application/json")
+    # Reconstruct a fake request-like object isn't possible; use engine directly
+    return await room.engine._handle_command_data(cmd)
 
 
 async def handle_room_state(req):
@@ -843,17 +896,40 @@ async def handle_rider_ws(req):
     ws = web.WebSocketResponse(heartbeat=30)
     await ws.prepare(req)
     room.rider_wss.add(ws)
+
+    # Assign participant slot
+    room._rider_counter += 1
+    idx = room._rider_counter
+    ws_id = id(ws)
+    anatomy = room._pick_anatomy(idx)
+    room.participants[ws_id] = {
+        "name": f"Rider {idx}",
+        "anatomy": anatomy,
+        "role": "rider",
+        "idx": idx,
+    }
     print(f"[rider] connected to {code}  (riders: {room.rider_count})")
+    await room._broadcast_participants()
 
     try:
         async for msg in ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
-                pass  # riders are receive-only (status msgs could go here)
+                try:
+                    data = json.loads(msg.data)
+                    if data.get("type") == "set_name":
+                        name = str(data.get("name", ""))[:30]
+                        if ws_id in room.participants:
+                            room.participants[ws_id]["name"] = name
+                        await room._broadcast_participants()
+                except Exception:
+                    pass
             elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSE):
                 break
     finally:
         room.rider_wss.discard(ws)
+        room.participants.pop(ws_id, None)
         print(f"[rider] disconnected from {code}  (riders: {room.rider_count})")
+        await room._broadcast_participants()
 
     return ws
 
@@ -1593,6 +1669,20 @@ async def handle_anatomy_upload(req):
                         content_type="application/json")
 
 
+async def handle_room_participants(req):
+    """Return current participant list and driver name for a room."""
+    code = req.match_info["code"]
+    room = _rooms.get(code)
+    if room is None:
+        raise web.HTTPNotFound(text="Room not found or expired")
+    parts = list(room.participants.values())
+    return web.Response(
+        text=json.dumps({"driver_name": room.driver_name, "participants": parts}),
+        content_type="application/json",
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+
 async def handle_room_anatomies(req):
     """Return custom anatomies for this room + standard anatomy list."""
     code = req.match_info["code"]
@@ -1682,6 +1772,8 @@ def build_app() -> web.Application:
     # Anatomy upload
     app.router.add_post("/room/{code}/upload_anatomy",         handle_anatomy_upload)
     app.router.add_get("/room/{code}/anatomies",               handle_room_anatomies)
+    # Participants
+    app.router.add_get("/room/{code}/participants",            handle_room_participants)
     # Static assets
     app.router.add_get("/bottle.png",                          handle_bottle_png)
     app.router.add_get("/touch_assets/list",                   handle_assets_list)
