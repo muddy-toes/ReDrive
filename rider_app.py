@@ -164,6 +164,65 @@ class RiderApp:
                   font=("Helvetica", 9), cursor="hand2",
                   command=self._clear_overlay).pack(side="left", padx=(0, 0), ipady=4, ipadx=6)
 
+        # ── My Wiring (collapsible) ───────────────────────────────────────────
+        self._wiring_expanded = False
+
+        wiring_section = tk.Frame(self.root, bg=BG)
+        wiring_section.pack(fill="x", padx=16, pady=(0, 4))
+
+        self._wiring_toggle = tk.Button(
+            wiring_section, text="▶ My Wiring",
+            bg=BG, fg=FG2, activebackground=BG, activeforeground=FG,
+            font=("Helvetica", 10), relief="flat", bd=0,
+            cursor="hand2", anchor="w",
+            command=self._toggle_wiring,
+        )
+        self._wiring_toggle.pack(fill="x")
+
+        self._wiring_frame = tk.Frame(wiring_section, bg=BG2,
+                                      highlightthickness=1,
+                                      highlightbackground=BORDER)
+        # starts hidden
+        self._wiring_frame.grid_remove()
+
+        CHANNEL_OPTIONS = ["Red", "Blue", "Neutral", "Green"]
+        CHANNEL_TO_NUM  = {"Red": "1", "Blue": "2", "Neutral": "3", "Green": "4"}
+
+        saved_wiring = self._config.get("wiring", {})
+
+        self._wiring_vars: dict[str, tk.StringVar] = {}
+        for row_idx, (position, default) in enumerate(
+            [("tip", "Blue"), ("balls", "Neutral"), ("anus", "Red")]
+        ):
+            saved_name = next(
+                (name for name, num in CHANNEL_TO_NUM.items()
+                 if num == saved_wiring.get(position, CHANNEL_TO_NUM[default])),
+                default,
+            )
+            var = tk.StringVar(value=saved_name)
+            self._wiring_vars[position] = var
+
+            tk.Label(
+                self._wiring_frame,
+                text=position.capitalize(),
+                bg=BG2, fg=FG2,
+                font=("Helvetica", 10),
+                width=7, anchor="w",
+            ).grid(row=row_idx, column=0, padx=(10, 4), pady=4, sticky="w")
+
+            cb = ttk.Combobox(
+                self._wiring_frame,
+                textvariable=var,
+                values=CHANNEL_OPTIONS,
+                state="readonly",
+                width=9,
+            )
+            cb.grid(row=row_idx, column=1, padx=(0, 10), pady=4, sticky="w")
+            cb.bind("<<ComboboxSelected>>",
+                    lambda _e: self._save_wiring())
+
+        self._CHANNEL_TO_NUM = CHANNEL_TO_NUM
+
         # ── Status row ────────────────────────────────────────────────────────
         status_row = tk.Frame(self.root, bg=BG)
         status_row.pack(fill="x", padx=16, pady=(2, 10))
@@ -200,6 +259,30 @@ class RiderApp:
     def _add_label(self, text: str):
         tk.Label(self.root, text=text, bg=BG, fg=FG2,
                  font=("Helvetica", 10)).pack(anchor="w", padx=16)
+
+    # ── Wiring helpers ────────────────────────────────────────────────────────
+
+    def _toggle_wiring(self):
+        self._wiring_expanded = not self._wiring_expanded
+        if self._wiring_expanded:
+            self._wiring_toggle.config(text="▼ My Wiring")
+            self._wiring_frame.pack(fill="x", pady=(2, 4))
+        else:
+            self._wiring_toggle.config(text="▶ My Wiring")
+            self._wiring_frame.pack_forget()
+
+    def _save_wiring(self):
+        self._config["wiring"] = {
+            pos: self._CHANNEL_TO_NUM[var.get()]
+            for pos, var in self._wiring_vars.items()
+        }
+        save_config(self._config)
+
+    def _get_wiring_payload(self) -> dict:
+        return {
+            pos: self._CHANNEL_TO_NUM[var.get()]
+            for pos, var in self._wiring_vars.items()
+        }
 
     # ── Overlay helpers ───────────────────────────────────────────────────────
 
@@ -327,6 +410,14 @@ class RiderApp:
 
                         # Upload anatomy overlay after successful WebSocket handshake
                         await self._upload_anatomy(relay_host, room)
+
+                        # Send wiring config so server knows physical channel mapping
+                        wiring_msg = json.dumps({
+                            "type": "rider_wiring",
+                            "wiring": self._get_wiring_payload(),
+                        })
+                        await relay_ws.send_str(wiring_msg)
+                        self._log_line("Wiring config sent.")
 
                         try:
                             async with session.ws_connect(restim) as restim_ws:
