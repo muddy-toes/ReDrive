@@ -1249,8 +1249,20 @@ let tcCustomImg   = null;
 let tcServerInt   = 0.5;
 
 function tcElecAt() {
-  return JSON.parse(localStorage.getItem('elecAt') || 'null')
-      || { tip:'2', balls:'3', anus:'1' };
+  const valid = ['1','2','3','4'];
+  const def = { tip:'2', balls:'3', anus:'1' };
+  try {
+    const stored = JSON.parse(localStorage.getItem('elecAt') || 'null');
+    if (!stored || typeof stored !== 'object') return def;
+    // Remap any non-numeric values (e.g. 'Red','Blue') back to defaults
+    const remapped = {};
+    const defVals = Object.values(def);
+    let di = 0;
+    for (const [k, v] of Object.entries(stored)) {
+      remapped[k] = valid.includes(String(v)) ? String(v) : (defVals[di++] || '1');
+    }
+    return remapped;
+  } catch(e) { return def; }
 }
 
 function tcRgba(hex, a) {
@@ -1262,7 +1274,8 @@ function tcBuildGrad(ctx, W, H) {
   const base = { '1':'255,68,68', '2':'68,136,255', '3':'255,204,20', '4':'68,204,112' };
   const ea = tcElecAt();
   const stops = Object.entries(ea)
-    .map(([anat,elec]) => ({ y:TC_ANAT_YF[anat], c:base[elec] }))
+    .map(([anat,elec]) => ({ y:TC_ANAT_YF[anat] ?? null, c:base[elec] || '180,180,180' }))
+    .filter(s => s.y !== null && s.y !== undefined)
     .sort((a,b) => a.y - b.y);
   const g = ctx.createLinearGradient(0,0,0,H);
   stops.forEach((s,i) => {
@@ -1348,7 +1361,8 @@ function tcDrawSimple(ctx, W, H, thumb) {
 function tcBetaFromY(y) {
   const ea = tcElecAt();
   const pts = Object.entries(ea)
-    .map(([anat,elec]) => ({ y:TC_ANAT_YF[anat], beta:TC_ELEC_BETA[elec] }))
+    .map(([anat,elec]) => ({ y:TC_ANAT_YF[anat] ?? null, beta:TC_ELEC_BETA[elec] ?? 0 }))
+    .filter(p => p.y !== null)
     .sort((a,b) => a.y - b.y);
   if (y <= pts[0].y) return pts[0].beta;
   if (y >= pts[pts.length-1].y) return pts[pts.length-1].beta;
