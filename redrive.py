@@ -435,7 +435,7 @@ DRIVER_HTML = r"""<!DOCTYPE html>
 
 <button id="stop-btn" onclick="sendStop()">⬛  STOP</button>
 
-<div class="section-label" style="margin-top:4px">Bottle Prompt</div>
+<div class="section-label" style="margin-top:4px">Poppers Prompt</div>
 <div class="slider-row" style="margin-bottom:6px">
   <div class="slider-header">
     <span class="slider-label">Duration</span>
@@ -444,7 +444,7 @@ DRIVER_HTML = r"""<!DOCTYPE html>
   <input type="range" id="bottle-dur" min="5" max="15" value="10"
          oninput="document.getElementById('bottle-dur-val').textContent=this.value+'s'">
 </div>
-<button id="bottle-btn" onclick="sendBottle()"><img src="/bottle.png" style="height:18px;vertical-align:middle;margin-right:4px">Poppers Prompt</button>
+<button id="bottle-btn" onclick="sendBottle()"><img src="/bottle.png" style="width:20px;height:20px;object-fit:contain;vertical-align:middle;margin-right:6px">Poppers Prompt</button>
 
 <div class="section-label">Live</div>
 <div id="viz-row">
@@ -1117,7 +1117,7 @@ TOUCH_HTML = r"""
     --bg:#111; --bg2:#1a1a1a; --bg3:#222;
     --border:#2a2a2a; --fg:#fff; --fg2:#999;
     --accent:#5fa3ff; --ok:#4caf50; --err:#f44336; --warn:#ff9800;
-    --ea:#ff3333; --eb:#4499ff; --ec:#ffdd00; --ed:#44cc70;
+    --e1:#ff4444; --e2:#4488ff; --e3:#ffcc14; --e4:#44cc70;
   }
   html, body { height: 100%; overflow: hidden; }
   body {
@@ -1219,11 +1219,15 @@ TOUCH_HTML = r"""
 <div class="top-row">
   <div id="conn"><div id="cdot"></div><span id="ctxt">Connecting&#8230;</span></div>
   <button id="stop-btn" onclick="doStop()">&#9632; STOP</button>
-  <button id="bottle-btn" onclick="sendBottle()">🍾</button>
+  <button id="bottle-btn" onclick="sendBottle()" title="Poppers Prompt"><img src="/bottle.png" style="width:20px;height:20px;object-fit:contain;vertical-align:middle" onerror="this.outerHTML='&#129749;'"></button>
+  <button id="room-code-btn" style="display:none;padding:4px 8px;background:none;
+    border:1px solid #2a2a2a;border-radius:4px;color:#5fa3ff;font-size:11px;
+    font-family:monospace;letter-spacing:.1em;cursor:pointer;white-space:nowrap"
+    onclick="touchCopyCode(this)" title="Tap to copy room code"></button>
   <button id="nav-link" onclick="if(window.parent!==window){window.parent.postMessage('close-touch','*');}else{window.location='/';}">Main &#8599;</button>
 </div>
 <div id="bottle-row">
-  <span style="font-size:10px;color:var(--fg2);white-space:nowrap">Bottle</span>
+  <span style="font-size:10px;color:var(--fg2);white-space:nowrap">Poppers</span>
   <input type="range" id="bottle-dur" min="5" max="15" value="10" style="flex:1"
          oninput="document.getElementById('bottle-dur-val').textContent=this.value+'s'">
   <span id="bottle-dur-val" style="font-size:10px;color:var(--warn);min-width:22px">10s</span>
@@ -1272,21 +1276,28 @@ TOUCH_HTML = r"""
 
 <div class="info-row">
   <span id="astatus">Tap or drag &middot; Y = position &middot; X = intensity</span>
-  <div class="legend">
-    <div class="leg"><div class="ldot" style="background:var(--ea)"></div>A</div>
-    <div class="leg"><div class="ldot" style="background:var(--eb)"></div>B</div>
-    <div class="leg"><div class="ldot" style="background:var(--ec)"></div>C</div>
-    <div class="leg"><div class="ldot" style="background:var(--ed)"></div>D</div>
+  <div style="display:flex;align-items:center;gap:6px">
+    <button id="conn-toggle-btn" onclick="openElecSheet()"
+            style="padding:3px 8px;background:var(--bg3);border:1px solid var(--border);
+                   border-radius:4px;color:var(--fg2);font-size:11px;cursor:pointer;
+                   white-space:nowrap;touch-action:manipulation">&#9881; Connections</button>
+    <div class="legend">
+      <div class="leg"><div class="ldot" style="background:var(--e1)"></div>Red</div>
+      <div class="leg"><div class="ldot" style="background:var(--e2)"></div>Blue</div>
+      <div class="leg"><div class="ldot" style="background:var(--e3)"></div>Yellow</div>
+      <div class="leg"><div class="ldot" style="background:var(--e4)"></div>Green</div>
+    </div>
   </div>
 </div>
 
 <script>
 const TOOLS = {
-  feather: { min:0.08, max:0.55, color:'#88aaff', cursorW:0.88 },
-  hand:    { min:0.25, max:0.80, color:'#ffffff', cursorW:0.55 },
-  stroker: { min:0.55, max:1.00, color:'#ff8800', cursorW:0.35 },
+  feather: { min:0.08, max:0.55, color:'#88aaff', cursorW:0.88, multiplier:0.35, power:1.5 },
+  hand:    { min:0.25, max:0.80, color:'#ffffff', cursorW:0.55, multiplier:0.75, power:1.0 },
+  stroker: { min:0.55, max:1.00, color:'#ff8800', cursorW:0.35, multiplier:1.00, power:0.8 },
 };
 let currentTool = 'feather';
+let serverIntensity = 0.5;  // updated by state poll; used as baseIntensity for tool curves
 let pointerDown = false;
 let lastBeta    = 5000;
 let lastX       = 0.5;
@@ -1299,14 +1310,15 @@ let _gesturePath= [];   // [{t,x,y}] canvas path recorded during draw (ms)
 let _loopStart  = 0;    // performance.now() when looping began
 let _loopDur    = 0;    // duration of one loop cycle (ms)
 
-// Electrode assignment: tip/balls/anus -> A/B/C label
-// FOC box wires left→right: Red(A), Blue(B), Yellow(C)  — Green(D) reserved for future
-const ELEC_BETA  = { A:0, B:9999, C:5000 };
+// Electrode assignment: tip/balls/anus -> 1/2/3/4 (FOC box: Red/Blue/Yellow/Green)
+// FOC box wires left→right: Red(1), Blue(2), Yellow(3), Green(4)
+const ELEC_BETA  = { '1':0, '2':2500, '3':7500, '4':9999 };
 const ANAT_YF    = { tip:0.0, balls:0.5, anus:1.0 };
-const ELEC_COLOR = { A:'#ff3333', B:'#4499ff', C:'#ffdd00' };
+const ELEC_COLOR = { '1':'#ff4444', '2':'#4488ff', '3':'#ffcc14', '4':'#44cc70' };
+const ELEC_LABEL = { '1':'Red', '2':'Blue', '3':'Yellow', '4':'Green' };
 
 let elecAt = JSON.parse(localStorage.getItem('elecAt') || 'null')
-          || { tip:'B', balls:'C', anus:'A' };
+          || { tip:'2', balls:'3', anus:'1' };
 
 function saveElecAt() { localStorage.setItem('elecAt', JSON.stringify(elecAt)); }
 
@@ -1315,10 +1327,10 @@ function buildElecSheet() {
     const container = document.getElementById('elec-' + anat);
     if (!container) return;
     container.innerHTML = '';
-    ['A','B','C'].forEach(elec => {
+    ['1','2','3','4'].forEach(elec => {
       const btn = document.createElement('button');
-      btn.textContent = elec;
-      btn.style.cssText = `flex:1;min-height:48px;border-radius:8px;border:2px solid ${ELEC_COLOR[elec]};background:${elecAt[anat]===elec ? ELEC_COLOR[elec]+'33' : 'var(--bg3)'};color:${ELEC_COLOR[elec]};font-size:18px;font-weight:bold;cursor:pointer;touch-action:manipulation;transition:background 0.15s`;
+      btn.textContent = ELEC_LABEL[elec];
+      btn.style.cssText = `flex:1;min-height:48px;border-radius:8px;border:2px solid ${ELEC_COLOR[elec]};background:${elecAt[anat]===elec ? ELEC_COLOR[elec]+'33' : 'var(--bg3)'};color:${ELEC_COLOR[elec]};font-size:13px;font-weight:bold;cursor:pointer;touch-action:manipulation;transition:background 0.15s`;
       btn.onclick = () => {
         const prev = Object.entries(elecAt).find(([a,e]) => a !== anat && e === elec);
         if (prev) elecAt[prev[0]] = elecAt[anat];
@@ -1336,14 +1348,20 @@ function openElecSheet() {
   buildElecSheet();
   document.getElementById('elec-sheet-bg').style.display = 'block';
   document.getElementById('elec-sheet').style.bottom = '0';
+  localStorage.setItem('elecSheetOpen', '1');
 }
 
 function closeElecSheet() {
   document.getElementById('elec-sheet-bg').style.display = 'none';
   document.getElementById('elec-sheet').style.bottom = '-100%';
+  localStorage.setItem('elecSheetOpen', '0');
 }
 
 document.getElementById('elec-toggle-btn').addEventListener('click', openElecSheet);
+// Restore collapsed state: sheet is hidden by default; only open if previously left open
+if (localStorage.getItem('elecSheetOpen') === '1') {
+  openElecSheet();
+}
 
 function betaFromY(y) {
   const pts = Object.entries(elecAt)
@@ -1361,7 +1379,16 @@ function betaFromY(y) {
 }
 
 function intensityFromX(x) {
+  // Legacy: used only for cursor display label (X-axis band)
   const t = TOOLS[currentTool]; return t.min + x * (t.max - t.min);
+}
+
+function intensityFromY(y) {
+  // Per-tool intensity curve: baseIntensity * multiplier * curve(y)
+  // y=0 is top (tip), y=1 is bottom.  We use y as the normalised position.
+  const t = TOOLS[currentTool];
+  const curved = Math.pow(Math.max(0, Math.min(1, y)), t.power);
+  return Math.max(0, Math.min(1, serverIntensity * t.multiplier * curved));
 }
 
 
@@ -1481,8 +1508,8 @@ function onDown(e) {
   lastBeta = betaFromY(pos.y); lastX = pos.x; lastY = pos.y;
   _trail = []; _trail.push({x:lastX, y:lastY, t:Date.now()});
   _gesturePath.push({t:0, x:lastX, y:lastY});
-  gestureRec.push({t:0, beta:lastBeta, intensity:intensityFromX(pos.x)});
-  sendCmd({ gesture_stop:true, beta_mode:'hold', beta:lastBeta, intensity:intensityFromX(pos.x) });
+  gestureRec.push({t:0, beta:lastBeta, intensity:intensityFromY(pos.y)});
+  sendCmd({ gesture_stop:true, beta_mode:'hold', beta:lastBeta, intensity:intensityFromY(pos.y) });
   setLooping(false); draw();
 }
 
@@ -1494,8 +1521,8 @@ function onMove(e) {
   _trail.push({x:lastX, y:lastY, t:Date.now()}); if (_trail.length>60) _trail.shift();
   const _gt = (performance.now()-gestureStart);
   _gesturePath.push({t:_gt, x:lastX, y:lastY});
-  gestureRec.push({t:_gt/1000, beta:lastBeta, intensity:intensityFromX(pos.x)});
-  sendCmd({ beta:lastBeta, intensity:intensityFromX(pos.x) });
+  gestureRec.push({t:_gt/1000, beta:lastBeta, intensity:intensityFromY(pos.y)});
+  sendCmd({ beta:lastBeta, intensity:intensityFromY(pos.y) });
   draw();
 }
 
@@ -1517,7 +1544,7 @@ function onUp() {
 
   if (gestureRec.length < 4 || rangeB < 400) {
     sendCmd({ beta_mode:'hold', beta:lastBeta });
-    setStatus('Hold ' + betaLabel(lastBeta) + '  ' + Math.round(intensityFromX(lastX)*100) + '%');
+    setStatus('Hold ' + betaLabel(lastBeta) + '  ' + Math.round(intensityFromY(lastY)*100) + '%');
     draw(); return;
   }
 
@@ -1552,13 +1579,13 @@ function subsample(pts, maxN) {
 }
 
 function betaLabel(v) {
-  let best = 'C', bestDist = Infinity;
+  let best = '1', bestDist = Infinity;
   for (const [,elec] of Object.entries(elecAt)) {
     const d = Math.abs(ELEC_BETA[elec] - v);
     if (d < bestDist) { bestDist = d; best = elec; }
   }
   const entry = Object.entries(elecAt).find(([,e]) => e === best);
-  return best + '(' + (entry ? entry[0] : '') + ')';
+  return ELEC_LABEL[best] + '(' + (entry ? entry[0] : '') + ')';
 }
 
 async function sendCmd(cmd) {
@@ -1581,6 +1608,16 @@ function setConn(ok) {
   document.getElementById('cdot').style.background = ok ? 'var(--ok)' : 'var(--err)';
   document.getElementById('ctxt').textContent = ok ? 'Connected' : 'Disconnected';
 }
+function touchCopyCode(btn) {
+  if (!btn || !btn.dataset.code) return;
+  navigator.clipboard.writeText(btn.dataset.code).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    btn.style.color = 'var(--ok)';
+    clearTimeout(btn._ct);
+    btn._ct = setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1500);
+  });
+}
 function setStatus(m) { document.getElementById('astatus').textContent = m; }
 function setLooping(on) {
   looping = on;
@@ -1594,7 +1631,7 @@ function rgba(hex, a) {
 }
 
 function buildAnatGrad(ctx, W, H) {
-  const base = { A:'255,51,51', B:'68,153,255', C:'255,221,0', D:'50,195,90' };
+  const base = { '1':'255,68,68', '2':'68,136,255', '3':'255,204,20', '4':'68,204,112' };
   const stops = Object.entries(elecAt)
     .map(([anat,elec]) => ({ y:ANAT_YF[anat], c:base[elec] }))
     .sort((a,b) => a.y - b.y);
@@ -1696,8 +1733,8 @@ function drawElecLabels(ctx, W, H) {
     if (anat==='balls') lblY = H*SCY + slb + 14;
     if (anat==='anus')  lblY = H*ANY + ar  + 14;
     if (lblY === undefined) lblY = H * ANAT_YF[anat] + 14;
-    ctx.font='bold 12px Arial'; ctx.textAlign='right'; ctx.fillStyle=ELEC_COLOR[elec];
-    ctx.fillText(elec, cx+W*0.44, lblY-2);
+    ctx.font='bold 10px Arial'; ctx.textAlign='right'; ctx.fillStyle=ELEC_COLOR[elec];
+    ctx.fillText(ELEC_LABEL[elec], cx+W*0.44, lblY-2);
     ctx.font='9px Arial'; ctx.textAlign='center'; ctx.fillStyle='rgba(180,180,200,0.58)';
     ctx.fillText(anat, cx, lblY);
   }
@@ -1740,7 +1777,7 @@ function drawToolCursor(ctx, W, H) {
     }
   }
   ctx.fillStyle=rgba(tool.color,0.80); ctx.font='bold 10px Arial'; ctx.textAlign='left';
-  ctx.fillText(Math.round(intensityFromX(lastX)*100)+'%', curX+cw*0.52+3, curY-3);
+  ctx.fillText(Math.round(intensityFromY(lastY)*100)+'%', curX+cw*0.52+3, curY-3);
   const tkR=W*0.30; ctx.strokeStyle=rgba(tool.color,0.40); ctx.lineWidth=1; ctx.setLineDash([3,4]);
   ctx.beginPath(); ctx.moveTo(W/2-tkR,curY); ctx.lineTo(W/2+tkR,curY); ctx.stroke();
   ctx.setLineDash([]);
@@ -1830,6 +1867,7 @@ const ro=new ResizeObserver(()=>draw()); ro.observe(document.getElementById('ana
 setInterval(async()=>{
   try {
     const d=await(await fetch('/state')).json(); setConn(true);
+    if (d.intensity != null) serverIntensity = d.intensity;
     if (!pointerDown) setLooping(d.gesture_active);
     if (d.gesture_active&&!pointerDown&&!looping) setStatus('Looping '+d.gesture_dur.toFixed(1)+'s  drag to replace');
   } catch(_) { setConn(false); }
