@@ -415,12 +415,20 @@ DRIVER_HTML = r"""<!DOCTYPE html>
 
   /* Live */
   #live { color:var(--fg2); font-size:11px; font-family:monospace; min-height:18px; }
+
+  /* Touch panel */
+  #touch-panel { gap:5px; }
+  #tc-main { min-height:320px; }
+  #tc-main canvas { display:block; }
 </style>
 </head>
 <body>
-<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
-  <h1 style="margin:0">RESTIM DRIVE</h1>
-  <a href="/touch" style="color:var(--fg2);font-size:11px;text-decoration:none;padding:4px 8px;border:1px solid var(--border);border-radius:4px">Touch ↗</a>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px">
+  <h1 style="margin:0;flex:1">RESTIM DRIVE</h1>
+  <button id="mode-toggle-btn" onclick="toggleMode()"
+    style="padding:3px 10px;background:#222;border:1px solid #444;color:#ccc;
+           border-radius:4px;cursor:pointer;font-size:11px;white-space:nowrap">&#128400; Touch</button>
+  <a href="/touch" style="color:var(--fg2);font-size:11px;text-decoration:none;padding:4px 8px;border:1px solid var(--border);border-radius:4px;white-space:nowrap">Touch &#8599;</a>
 </div>
 
 <div id="status-bar">
@@ -456,6 +464,7 @@ DRIVER_HTML = r"""<!DOCTYPE html>
   <div id="beta-labels"><span>◄ L</span><span>Centre</span><span>R ►</span></div>
 </div>
 
+<div id="controls-panel">
 <div class="section-label">Presets</div>
 <div id="preset-row"></div>
 
@@ -607,14 +616,36 @@ DRIVER_HTML = r"""<!DOCTYPE html>
     α  Alpha oscillation: ON
   </button>
 </div>
+</div><!-- end #controls-panel -->
 
-<div style="margin-top:8px">
-  <button id="touch-mode-btn" onclick="toggleTouchPanel()"
-          style="width:100%;padding:.7rem;background:#1a2a1a;border:1px solid #2a4a2a;
-                 border-radius:6px;color:#88cc88;font-size:.9rem;cursor:pointer">
-    🖐 Open Touch Mode
-  </button>
-</div>
+<div id="touch-panel" style="display:none;flex-direction:column;gap:5px">
+  <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
+    <div id="tc-conn" style="display:flex;align-items:center;gap:5px">
+      <div id="tc-dot" style="width:9px;height:9px;border-radius:50%;background:var(--err);flex-shrink:0"></div>
+      <span id="tc-txt" style="color:var(--fg2);font-size:11px">Connected</span>
+    </div>
+    <button onclick="tcStop()" style="flex:1;padding:8px;background:var(--err);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer">&#9632; STOP</button>
+  </div>
+  <div id="tc-main" style="position:relative;border-radius:6px;background:#1a1a1a;min-height:320px;flex:1">
+    <canvas id="touch-canvas" style="width:100%;height:100%;display:block;border-radius:6px;cursor:none;touch-action:none"></canvas>
+  </div>
+  <div style="display:flex;gap:6px">
+    <button class="tc-tool-btn" data-tool="feather" onclick="tcSelectTool(this)"
+      style="flex:1;min-height:48px;background:#141428;border:1px solid #88aaff;border-radius:8px;color:#88aaff;font-size:20px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 4px;touch-action:manipulation">
+      &#129302;<span style="font-size:10px">Feather</span>
+    </button>
+    <button class="tc-tool-btn" data-tool="hand" onclick="tcSelectTool(this)"
+      style="flex:1;min-height:48px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--fg2);font-size:20px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 4px;touch-action:manipulation">
+      &#9995;<span style="font-size:10px">Hand</span>
+    </button>
+    <button class="tc-tool-btn" data-tool="stroker" onclick="tcSelectTool(this)"
+      style="flex:1;min-height:48px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--fg2);font-size:20px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 4px;touch-action:manipulation">
+      &#9889;<span style="font-size:10px">Stroker</span>
+    </button>
+  </div>
+  <div style="display:flex;gap:6px;overflow-x:auto;flex-shrink:0;padding:2px 0 4px;min-height:70px;align-items:flex-start" id="tc-picker"></div>
+  <div id="tc-status" style="color:var(--fg2);font-size:11px;font-family:monospace;min-height:16px">Tap or drag &middot; Y = position &middot; X = intensity</div>
+</div><!-- end #touch-panel -->
 
 <div id="participants-panel" style="display:none;align-items:flex-end;gap:0;margin:8px 0 4px;min-height:0"></div>
 
@@ -1105,28 +1136,350 @@ function renderParticipants(data) {
   setInterval(fetchParticipants, 5000);
 })();
 
-function toggleTouchPanel() {
-  const panel = document.getElementById('touch-panel');
-  if (panel.style.bottom === '0px') { closeTouchPanel(); } else { openTouchPanel(); }
+// ── Mode toggle (controls ↔ touch) ───────────────────────────────────────────
+let _driverMode = 'controls';
+function toggleMode() {
+  _driverMode = _driverMode === 'controls' ? 'touch' : 'controls';
+  document.getElementById('controls-panel').style.display = _driverMode === 'controls' ? '' : 'none';
+  const tp = document.getElementById('touch-panel');
+  tp.style.display = _driverMode === 'touch' ? 'flex' : 'none';
+  document.getElementById('mode-toggle-btn').textContent =
+    _driverMode === 'controls' ? '\uD83D\uDD90 Touch' : '\uD83C\uDFDB Controls';
+  if (_driverMode === 'touch') initTouchPanel();
 }
-function openTouchPanel() {
-  const frame = document.getElementById('touch-frame');
-  if (!frame.src || frame.src === window.location.href) {
-    // Build touch URL: replace /room/CODE?key=... with /room/CODE/touch (no key needed for touch)
-    const touchUrl = window.location.pathname.replace(/\/$/, '') + '/touch';
-    frame.src = touchUrl;
+
+// ── Embedded touch panel ─────────────────────────────────────────────────────
+const TC_TOOLS = {
+  feather: { min:0.08, max:0.55, color:'#88aaff', cursorW:0.88, multiplier:0.35, power:1.5 },
+  hand:    { min:0.25, max:0.80, color:'#ffffff', cursorW:0.55, multiplier:0.75, power:1.0 },
+  stroker: { min:0.55, max:1.00, color:'#ff8800', cursorW:0.35, multiplier:1.00, power:0.8 },
+};
+const TC_ELEC_BETA  = { '1':0, '2':2500, '3':7500, '4':9999 };
+const TC_ANAT_YF   = { tip:0.0, balls:0.5, anus:1.0 };
+const TC_ELEC_COLOR= { '1':'#ff4444', '2':'#4488ff', '3':'#ffcc14', '4':'#44cc70' };
+
+let tcTool        = 'feather';
+let tcPointerDown = false;
+let tcLastX       = 0.5, tcLastY = 0.5;
+let tcTrail       = [];
+let tcPanelInited = false;
+let tcAnatVariants= [];
+let tcCurrentAnat = localStorage.getItem('anatId') || 'default';
+let tcCustomImg   = null;
+let tcServerInt   = 0.5;
+
+function tcElecAt() {
+  return JSON.parse(localStorage.getItem('elecAt') || 'null')
+      || { tip:'2', balls:'3', anus:'1' };
+}
+
+function tcRgba(hex, a) {
+  const n = parseInt(hex.replace('#',''), 16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+}
+
+function tcBuildGrad(ctx, W, H) {
+  const base = { '1':'255,68,68', '2':'68,136,255', '3':'255,204,20', '4':'68,204,112' };
+  const ea = tcElecAt();
+  const stops = Object.entries(ea)
+    .map(([anat,elec]) => ({ y:TC_ANAT_YF[anat], c:base[elec] }))
+    .sort((a,b) => a.y - b.y);
+  const g = ctx.createLinearGradient(0,0,0,H);
+  stops.forEach((s,i) => {
+    const op = [0.82,0.60,0.44,0.76][i] || 0.60;
+    g.addColorStop(s.y, `rgba(${s.c},${op})`);
+  });
+  return g;
+}
+
+function tcDrawDetailed(ctx, W, H, thumb) {
+  const cx=W/2, GLY=0.07, SHT=0.15, SHB=0.44, SCY=0.50, PERY=0.72, ANY=0.88;
+  const shr=W*0.130, gr=W*0.195, gtv=H*0.055;
+  const slx=W*0.195, sla=W*0.205, slb=H*0.115;
+  const ar=Math.min(W*0.095,H*0.046), pr=W*0.062, lw=thumb?0.8:1.5;
+  ctx.clearRect(0,0,W,H); ctx.fillStyle='#1a1a1a'; ctx.fillRect(0,0,W,H);
+  const grad=tcBuildGrad(ctx,W,H);
+  const fill=()=>{ ctx.fillStyle=grad; ctx.fill(); ctx.strokeStyle='#2c3558'; ctx.lineWidth=lw; ctx.stroke(); };
+  ctx.beginPath();
+  ctx.moveTo(cx-pr,H*PERY);
+  ctx.bezierCurveTo(cx-pr*0.7,H*(PERY+ANY)/2,cx-ar*0.85,H*ANY-ar*0.7,cx-ar*0.85,H*ANY);
+  ctx.lineTo(cx+ar*0.85,H*ANY);
+  ctx.bezierCurveTo(cx+ar*0.85,H*ANY-ar*0.7,cx+pr*0.7,H*(PERY+ANY)/2,cx+pr,H*PERY);
+  ctx.closePath(); fill();
+  ctx.beginPath(); ctx.ellipse(cx-slx,H*SCY+slb*0.18,sla*0.82,slb*0.86,0.08,0,Math.PI*2); fill();
+  ctx.beginPath(); ctx.ellipse(cx+slx,H*SCY+slb*0.18,sla*0.82,slb*0.86,-0.08,0,Math.PI*2); fill();
+  ctx.beginPath(); ctx.moveTo(cx,H*SCY-slb*0.12);
+  ctx.bezierCurveTo(cx+slb*0.04,H*SCY,cx-slb*0.04,H*(SCY+0.07),cx,H*(SCY+0.10));
+  ctx.strokeStyle='rgba(28,38,88,0.50)'; ctx.lineWidth=thumb?1:2; ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx-shr*1.06,H*SHB); ctx.lineTo(cx-shr,H*SHT);
+  ctx.lineTo(cx+shr,H*SHT); ctx.lineTo(cx+shr*1.06,H*SHB);
+  ctx.closePath(); fill();
+  ctx.beginPath(); ctx.ellipse(cx,H*GLY,gr,gtv,0,0,Math.PI*2); fill();
+  ctx.beginPath();
+  ctx.moveTo(cx-gr*0.87,H*SHT+1);
+  ctx.bezierCurveTo(cx-gr*0.20,H*SHT+H*0.013,cx+gr*0.20,H*SHT+H*0.013,cx+gr*0.87,H*SHT+1);
+  ctx.strokeStyle='rgba(28,38,88,0.60)'; ctx.lineWidth=thumb?1:2.5; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx,H*ANY,ar,0,Math.PI*2);
+  ctx.fillStyle='rgba(45,75,225,0.68)'; ctx.fill();
+  ctx.strokeStyle='#223298'; ctx.lineWidth=lw; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx,H*ANY,ar*0.50,0,Math.PI*2);
+  ctx.strokeStyle='rgba(90,130,255,0.32)'; ctx.lineWidth=1; ctx.stroke();
+  if (!thumb) {
+    const tg=ctx.createRadialGradient(cx,0,0,cx,0,H*0.42);
+    tg.addColorStop(0,'rgba(255,195,20,0.16)'); tg.addColorStop(1,'transparent');
+    ctx.fillStyle=tg; ctx.fillRect(0,0,W,H);
+    const bg=ctx.createRadialGradient(cx,H,0,cx,H,H*0.42);
+    bg.addColorStop(0,'rgba(50,70,240,0.16)'); bg.addColorStop(1,'transparent');
+    ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
   }
-  document.getElementById('touch-overlay').style.display = 'block';
-  document.getElementById('touch-panel').style.bottom = '0px';
-  document.getElementById('touch-mode-btn').textContent = '✕ Close Touch Mode';
 }
-function closeTouchPanel() {
-  document.getElementById('touch-overlay').style.display = 'none';
-  document.getElementById('touch-panel').style.bottom = '-100%';
-  document.getElementById('touch-mode-btn').textContent = '🖐 Open Touch Mode';
+
+function tcDrawSimple(ctx, W, H, thumb) {
+  const cx=W/2;
+  ctx.clearRect(0,0,W,H); ctx.fillStyle='#1a1a1a'; ctx.fillRect(0,0,W,H);
+  const grad=tcBuildGrad(ctx,W,H);
+  ctx.beginPath();
+  ctx.moveTo(cx,H*0.02);
+  ctx.bezierCurveTo(cx+W*0.17,H*0.05,cx+W*0.22,H*0.20,cx+W*0.31,H*0.48);
+  ctx.bezierCurveTo(cx+W*0.33,H*0.55,cx+W*0.20,H*0.66,cx+W*0.11,H*0.80);
+  ctx.bezierCurveTo(cx+W*0.05,H*0.91,cx+W*0.03,H*0.96,cx,H*0.97);
+  ctx.bezierCurveTo(cx-W*0.03,H*0.96,cx-W*0.05,H*0.91,cx-W*0.11,H*0.80);
+  ctx.bezierCurveTo(cx-W*0.20,H*0.66,cx-W*0.33,H*0.55,cx-W*0.31,H*0.48);
+  ctx.bezierCurveTo(cx-W*0.22,H*0.20,cx-W*0.17,H*0.05,cx,H*0.02);
+  ctx.closePath();
+  ctx.fillStyle=grad; ctx.fill();
+  ctx.strokeStyle='#3a4a90'; ctx.lineWidth=thumb?1:2; ctx.stroke();
+  if (!thumb) {
+    ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=1; ctx.setLineDash([3,4]);
+    for (const yf of [0.44,0.56]) {
+      ctx.beginPath(); ctx.moveTo(W*0.12,H*yf); ctx.lineTo(W*0.88,H*yf); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    const tg=ctx.createRadialGradient(cx,0,0,cx,0,H*0.50);
+    tg.addColorStop(0,'rgba(255,195,20,0.14)'); tg.addColorStop(1,'transparent');
+    ctx.fillStyle=tg; ctx.fillRect(0,0,W,H);
+    const bg=ctx.createRadialGradient(cx,H,0,cx,H,H*0.50);
+    bg.addColorStop(0,'rgba(50,70,240,0.14)'); bg.addColorStop(1,'transparent');
+    ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+  }
 }
-// Listen for close message from touch iframe (when touch page "Main" button is pressed)
-window.addEventListener('message', e => { if (e.data === 'close-touch') closeTouchPanel(); });
+
+function tcBetaFromY(y) {
+  const ea = tcElecAt();
+  const pts = Object.entries(ea)
+    .map(([anat,elec]) => ({ y:TC_ANAT_YF[anat], beta:TC_ELEC_BETA[elec] }))
+    .sort((a,b) => a.y - b.y);
+  if (y <= pts[0].y) return pts[0].beta;
+  if (y >= pts[pts.length-1].y) return pts[pts.length-1].beta;
+  for (let i=0; i<pts.length-1; i++) {
+    if (y>=pts[i].y && y<=pts[i+1].y) {
+      const f=(y-pts[i].y)/(pts[i+1].y-pts[i].y);
+      return Math.round(pts[i].beta+f*(pts[i+1].beta-pts[i].beta));
+    }
+  }
+  return 5000;
+}
+
+function tcIntFromY(y) {
+  const t=TC_TOOLS[tcTool];
+  const curved=Math.pow(Math.max(0,Math.min(1,y)),t.power);
+  return Math.max(0,Math.min(1,tcServerInt*t.multiplier*curved));
+}
+
+function tcDraw() {
+  const canvas=document.getElementById('touch-canvas');
+  if (!canvas) return;
+  const W=canvas.offsetWidth, H=canvas.offsetHeight;
+  if (W<10||H<10) return;
+  canvas.width=W; canvas.height=H;
+  const ctx=canvas.getContext('2d');
+  if (tcCustomImg) {
+    ctx.fillStyle='#1a1a1a'; ctx.fillRect(0,0,W,H);
+    ctx.drawImage(tcCustomImg,0,0,W,H);
+  } else {
+    const v=tcAnatVariants.find(a=>a.id===tcCurrentAnat);
+    const fn=(v&&v.drawFn)||tcDrawDetailed;
+    fn(ctx,W,H,false);
+  }
+  // Tool band
+  const t=TC_TOOLS[tcTool], xL=t.min*W, xR=t.max*W;
+  ctx.fillStyle=tcRgba(t.color,0.07); ctx.fillRect(xL,0,xR-xL,H);
+  // Trail
+  const now=Date.now(), FADE=1800;
+  for (const p of tcTrail) {
+    const age=now-p.t;
+    if (age>FADE) continue;
+    const f=1-age/FADE, r=4+f*8;
+    ctx.beginPath(); ctx.arc(p.x*W,p.y*H,r,0,Math.PI*2);
+    ctx.fillStyle=`rgba(95,163,255,${(f*f*0.55).toFixed(3)})`; ctx.fill();
+  }
+  if (tcTrail.length>0) {
+    const head=tcTrail[tcTrail.length-1];
+    ctx.beginPath(); ctx.arc(head.x*W,head.y*H,6,0,Math.PI*2);
+    ctx.fillStyle='rgba(95,163,255,0.90)'; ctx.fill();
+  }
+  // Cursor
+  if (tcPointerDown) {
+    const curX=tcLastX*W, curY=tcLastY*H, cw=W*t.cursorW, ch=Math.max(16,cw*0.16);
+    const glow=ctx.createRadialGradient(curX,curY,0,curX,curY,cw*0.56);
+    glow.addColorStop(0,tcRgba(t.color,0.26)); glow.addColorStop(0.65,tcRgba(t.color,0.10)); glow.addColorStop(1,tcRgba(t.color,0));
+    ctx.fillStyle=glow; ctx.beginPath(); ctx.ellipse(curX,curY,cw*0.56,ch*0.95,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(curX,curY,cw*0.50,ch*0.78,0,0,Math.PI*2);
+    ctx.strokeStyle=tcRgba(t.color,0.48); ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle=tcRgba(t.color,0.80); ctx.font='bold 10px Arial'; ctx.textAlign='left';
+    ctx.fillText(Math.round(tcIntFromY(tcLastY)*100)+'%',curX+cw*0.52+3,curY-3);
+  }
+}
+
+function tcGetPos(e, canvas) {
+  const rect=canvas.getBoundingClientRect(), src=e.touches?e.touches[0]:e;
+  return {
+    x:Math.max(0,Math.min(1,(src.clientX-rect.left)/rect.width)),
+    y:Math.max(0,Math.min(1,(src.clientY-rect.top)/rect.height)),
+  };
+}
+
+function tcOnDown(e) {
+  e.preventDefault();
+  tcPointerDown=true;
+  const canvas=document.getElementById('touch-canvas');
+  const pos=tcGetPos(e,canvas);
+  tcLastX=pos.x; tcLastY=pos.y;
+  tcTrail=[{x:pos.x,y:pos.y,t:Date.now()}];
+  sendCmd({beta_mode:'hold',beta:tcBetaFromY(pos.y),intensity:tcIntFromY(pos.y)});
+  tcDraw();
+}
+function tcOnMove(e) {
+  if (!tcPointerDown) return; e.preventDefault();
+  const canvas=document.getElementById('touch-canvas');
+  const pos=tcGetPos(e,canvas);
+  tcLastX=pos.x; tcLastY=pos.y;
+  tcTrail.push({x:pos.x,y:pos.y,t:Date.now()});
+  if (tcTrail.length>60) tcTrail.shift();
+  sendCmd({beta:tcBetaFromY(pos.y),intensity:tcIntFromY(pos.y)});
+  tcDraw();
+}
+function tcOnUp() {
+  if (!tcPointerDown) return;
+  tcPointerDown=false; tcDraw();
+}
+function tcStop() { sendCmd({stop:true}); }
+
+function tcSelectTool(btn) {
+  document.querySelectorAll('.tc-tool-btn').forEach(b=>{
+    b.style.background='var(--bg3)'; b.style.borderColor='var(--border)'; b.style.color='var(--fg2)';
+  });
+  tcTool=btn.dataset.tool;
+  const t=TC_TOOLS[tcTool];
+  btn.style.background=tcRgba(t.color,0.08); btn.style.borderColor=t.color; btn.style.color=t.color;
+  tcDraw();
+}
+
+function tcBuildPicker() {
+  const el=document.getElementById('tc-picker'); if (!el) return;
+  el.innerHTML='';
+  tcAnatVariants=[
+    {id:'default',label:'Default',type:'canvas',drawFn:tcDrawDetailed},
+    {id:'simple', label:'Simple', type:'canvas',drawFn:tcDrawSimple},
+  ];
+  for (const v of tcAnatVariants) {
+    const wrap=document.createElement('div');
+    wrap.style.cssText='width:48px;height:64px;border-radius:6px;cursor:pointer;' +
+      'border:2px solid '+(v.id===tcCurrentAnat?'var(--accent)':'var(--border)')+';' +
+      'flex-shrink:0;overflow:hidden;background:var(--bg3);position:relative;touch-action:manipulation';
+    if (v.type==='canvas') {
+      const tc=document.createElement('canvas'); tc.width=48; tc.height=64;
+      v.drawFn(tc.getContext('2d'),48,64,true);
+      wrap.appendChild(tc);
+    }
+    const lbl=document.createElement('div');
+    lbl.style.cssText='position:absolute;bottom:0;left:0;right:0;font-size:8px;text-align:center;'+
+      'background:rgba(0,0,0,0.60);padding:2px 0;color:var(--fg2);pointer-events:none';
+    lbl.textContent=v.label; wrap.appendChild(lbl);
+    wrap.addEventListener('click',()=>{
+      tcCurrentAnat=v.id; localStorage.setItem('anatId',v.id);
+      if (v.type==='canvas') { tcCustomImg=null; tcDraw(); }
+      document.querySelectorAll('#tc-picker > div').forEach((w,i)=>{
+        w.style.borderColor=(tcAnatVariants[i]&&tcAnatVariants[i].id===v.id)?'var(--accent)':'var(--border)';
+      });
+    });
+    el.appendChild(wrap);
+  }
+  // Also try to load PNG variants from server
+  fetch('/touch_assets/list?type=anatomy').then(r=>r.ok?r.json():null).then(files=>{
+    if (!files||!files.length) return;
+    for (const f of files) {
+      const id=f, label=f.replace(/\.[^.]+$/,'');
+      tcAnatVariants.push({id,label,type:'png',src:'/touch_assets/anatomy/'+encodeURIComponent(f)});
+      const wrap=document.createElement('div');
+      wrap.style.cssText='width:48px;height:64px;border-radius:6px;cursor:pointer;' +
+        'border:2px solid var(--border);flex-shrink:0;overflow:hidden;background:var(--bg3);position:relative;touch-action:manipulation';
+      const img=document.createElement('img'); img.src='/touch_assets/anatomy/'+encodeURIComponent(f);
+      img.style='width:100%;height:100%;display:block;object-fit:cover'; wrap.appendChild(img);
+      const lbl=document.createElement('div');
+      lbl.style.cssText='position:absolute;bottom:0;left:0;right:0;font-size:8px;text-align:center;'+
+        'background:rgba(0,0,0,0.60);padding:2px 0;color:var(--fg2);pointer-events:none';
+      lbl.textContent=label; wrap.appendChild(lbl);
+      wrap.addEventListener('click',()=>{
+        tcCurrentAnat=id; localStorage.setItem('anatId',id);
+        const im2=new Image();
+        im2.onload=()=>{tcCustomImg=im2; tcDraw();};
+        im2.onerror=()=>{tcCustomImg=null; tcDraw();};
+        im2.src='/touch_assets/anatomy/'+encodeURIComponent(f);
+        document.querySelectorAll('#tc-picker > div').forEach((w,j)=>{
+          w.style.borderColor=(tcAnatVariants[j]&&tcAnatVariants[j].id===id)?'var(--accent)':'var(--border)';
+        });
+      });
+      el.appendChild(wrap);
+    }
+  }).catch(()=>{});
+}
+
+function initTouchPanel() {
+  if (tcPanelInited) { requestAnimationFrame(()=>requestAnimationFrame(tcDraw)); return; }
+  tcPanelInited = true;
+  const canvas=document.getElementById('touch-canvas');
+  const wrap=document.getElementById('tc-main');
+  canvas.addEventListener('mousedown',  tcOnDown, {passive:false});
+  canvas.addEventListener('touchstart', tcOnDown, {passive:false});
+  canvas.addEventListener('mousemove',  tcOnMove, {passive:false});
+  canvas.addEventListener('touchmove',  tcOnMove, {passive:false});
+  document.addEventListener('mouseup',     tcOnUp);
+  document.addEventListener('touchend',    tcOnUp);
+  document.addEventListener('touchcancel', tcOnUp);
+  const tcRO=new ResizeObserver(entries=>{
+    for (const e of entries) {
+      if (e.contentRect.width>10&&e.contentRect.height>10) requestAnimationFrame(tcDraw);
+    }
+  });
+  tcRO.observe(wrap);
+  tcBuildPicker();
+  // Apply saved anatomy if it's a PNG
+  if (tcCurrentAnat!=='default'&&tcCurrentAnat!=='simple') {
+    const img=new Image();
+    img.onload=()=>{tcCustomImg=img; tcDraw();};
+    img.onerror=()=>{tcCustomImg=null; tcDraw();};
+    img.src='/touch_assets/anatomy/'+encodeURIComponent(tcCurrentAnat);
+  }
+  // Fade trail
+  (function tcTrailTick() {
+    if (_driverMode==='touch') {
+      const now=Date.now();
+      tcTrail=tcTrail.filter(p=>now-p.t<1800);
+      if (tcTrail.length||tcPointerDown) tcDraw();
+    }
+    requestAnimationFrame(tcTrailTick);
+  })();
+  // Poll server intensity for tool scaling
+  setInterval(async()=>{
+    try {
+      const d=await(await fetch('/state')).json();
+      if (d.intensity!=null) tcServerInt=d.intensity;
+    } catch(_) {}
+  }, 1500);
+  requestAnimationFrame(()=>requestAnimationFrame(tcDraw));
+}
 </script>
 <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
 <script>
@@ -1138,20 +1491,6 @@ window.addEventListener('message', e => { if (e.data === 'close-touch') closeTou
   });
 </script>
 
-<div id="touch-overlay" style="display:none;position:fixed;inset:0;z-index:500;
-     background:rgba(0,0,0,0.5)" onclick="if(event.target===this)closeTouchPanel()"></div>
-<div id="touch-panel" style="position:fixed;bottom:-100%;left:0;right:0;
-     height:75vh;background:#111;border-top:2px solid #2a4a2a;border-radius:16px 16px 0 0;
-     z-index:501;transition:bottom 0.3s ease;display:flex;flex-direction:column">
-  <div style="display:flex;align-items:center;justify-content:space-between;
-              padding:10px 16px;border-bottom:1px solid #222;flex-shrink:0">
-    <span style="color:#88cc88;font-weight:bold;font-size:14px">🖐 Touch Mode</span>
-    <button onclick="closeTouchPanel()"
-            style="background:none;border:none;color:#999;font-size:22px;cursor:pointer;padding:0 4px">✕</button>
-  </div>
-  <iframe id="touch-frame" src="" style="flex:1;border:none;width:100%;background:#111"
-          allow="pointer-events"></iframe>
-</div>
 </body>
 </html>
 """
@@ -2057,7 +2396,8 @@ function _pathAt(t) {
   requestAnimationFrame(trailTick);
 })();
 
-const ro=new ResizeObserver(()=>draw()); ro.observe(document.getElementById('anatomy-wrap'));
+const ro=new ResizeObserver(entries=>{ for(const e of entries){ if(e.contentRect.width>10&&e.contentRect.height>10) draw(); } });
+ro.observe(document.getElementById('anatomy-wrap'));
 
 setInterval(async()=>{
   try {
@@ -2068,7 +2408,9 @@ setInterval(async()=>{
   } catch(_) { setConn(false); }
 },1500);
 
-loadAnatomyList(); loadToolImages(); draw(); autoUploadStoredAnatomy();
+loadAnatomyList(); loadToolImages(); autoUploadStoredAnatomy();
+// Defer first draw until layout is complete so offsetWidth/offsetHeight are non-zero
+requestAnimationFrame(() => requestAnimationFrame(() => draw()));
 
 // ── Rider name input ───────────────────────────────────────────────────────
 let _riderWs = null;
