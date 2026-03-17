@@ -1201,7 +1201,14 @@ function toggleMode() {
   tp.style.display = _driverMode === 'touch' ? 'flex' : 'none';
   document.getElementById('mode-toggle-btn').textContent =
     _driverMode === 'controls' ? '\uD83D\uDD90 Touch' : '\uD83C\uDFDB Controls';
-  if (_driverMode === 'touch') initTouchPanel();
+  if (_driverMode === 'touch') {
+    initTouchPanel();
+    // Retry until tc-main has laid out
+    (function tryTcDraw(){
+      const w=document.getElementById('tc-main');
+      if(w&&w.offsetHeight>10){tcDraw();}else{requestAnimationFrame(tryTcDraw);}
+    })();
+  }
 }
 
 // ── Embedded touch panel ─────────────────────────────────────────────────────
@@ -1494,7 +1501,7 @@ function tcBuildPicker() {
 }
 
 function initTouchPanel() {
-  if (tcPanelInited) { requestAnimationFrame(()=>requestAnimationFrame(tcDraw)); return; }
+  if (tcPanelInited) { return; }
   tcPanelInited = true;
   const canvas=document.getElementById('touch-canvas');
   const wrap=document.getElementById('tc-main');
@@ -1535,7 +1542,6 @@ function initTouchPanel() {
       if (d.intensity!=null) tcServerInt=d.intensity;
     } catch(_) {}
   }, 1500);
-  requestAnimationFrame(()=>requestAnimationFrame(tcDraw));
 }
 </script>
 <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
@@ -1570,7 +1576,7 @@ TOUCH_HTML = r"""
     --accent:#5fa3ff; --ok:#4caf50; --err:#f44336; --warn:#ff9800;
     --e1:#ff4444; --e2:#4488ff; --e3:#ffcc14; --e4:#44cc70;
   }
-  html, body { height: 100%; overflow-y: auto; }
+  html, body { height: 100%; overflow: hidden; }
   body {
     background: var(--bg); color: var(--fg);
     font-family: Arial, sans-serif; font-size: 14px;
@@ -1596,7 +1602,7 @@ TOUCH_HTML = r"""
   #cdot { width: 9px; height: 9px; border-radius: 50%; background: var(--err); flex-shrink: 0; }
   #ctxt { color: var(--fg2); font-size: 11px; }
   #main-area { flex: 1; min-height: 0; display: flex; position: relative; }
-  #anatomy-wrap { flex: 1; min-width: 0; min-height: 0; position: relative; border-radius: 6px; }
+  #anatomy-wrap { flex: 1; min-width: 0; min-height: 300px; height: 100%; position: relative; border-radius: 6px; }
   @keyframes loop-pulse {
     0%,100% { box-shadow: 0 0 0 0 rgba(95,163,255,0.5); }
     50%      { box-shadow: 0 0 0 8px rgba(95,163,255,0); }
@@ -2492,6 +2498,12 @@ function _pathAt(t) {
 const ro=new ResizeObserver(()=>draw());
 ro.observe(document.getElementById('anatomy-wrap'));
 
+// Retry initial draw until the element has a real height
+(function tryDraw(){
+  const w=document.getElementById('anatomy-wrap');
+  if(w&&w.offsetHeight>10){draw();}else{requestAnimationFrame(tryDraw);}
+})();
+
 setInterval(async()=>{
   try {
     const d=await(await fetch('/state')).json(); setConn(true);
@@ -2507,7 +2519,7 @@ setInterval(async()=>{
   } catch(_) { setConn(false); }
 },1500);
 
-loadAnatomyList(); loadToolImages(); draw(); autoUploadStoredAnatomy();
+loadAnatomyList(); loadToolImages(); autoUploadStoredAnatomy();
 
 // ── Like button ─────────────────────────────────────────────────────────────
 function sendLike(emoji) {
