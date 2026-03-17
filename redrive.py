@@ -411,10 +411,16 @@ DRIVER_HTML = r"""<!DOCTYPE html>
   /* Live */
   #live { color:var(--fg2); font-size:11px; font-family:monospace; min-height:18px; }
 
-  /* Touch panel */
-  #touch-panel { gap:5px; }
-  #tc-main { min-height:320px; height:calc(100vh - 220px); }
-  #tc-main canvas { display:block; }
+  /* Touch panel — fixed overlay so canvas always gets viewport dimensions */
+  #touch-panel {
+    position:fixed; inset:0; z-index:200;
+    background:var(--bg);
+    display:none; flex-direction:column; gap:5px;
+    padding:8px; padding-top:calc(8px + env(safe-area-inset-top));
+    max-width:480px; margin:0 auto; box-sizing:border-box;
+  }
+  #tc-main { flex:1; min-height:0; min-width:0; }
+  #tc-main canvas { display:block; width:100%; height:100%; cursor:none; touch-action:none; }
 </style>
 </head>
 <body>
@@ -1203,15 +1209,8 @@ function toggleMode() {
     _driverMode === 'controls' ? '\uD83D\uDD90 Touch' : '\uD83C\uDFDB Controls';
   if (_driverMode === 'touch') {
     initTouchPanel();
-    const _tcUntil=Date.now()+3000;
-    (function syncTcDraw(){
-      const w=document.getElementById('tc-main');
-      const c=document.getElementById('touch-canvas');
-      if(w&&w.offsetHeight>10){
-        if(!c||c.width!==w.offsetWidth||c.height!==w.offsetHeight){tcDraw();}
-      }
-      if(Date.now()<_tcUntil){requestAnimationFrame(syncTcDraw);}
-    })();
+    // Single rAF is enough — fixed overlay has immediate viewport dimensions
+    requestAnimationFrame(tcDraw);
   }
 }
 

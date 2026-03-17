@@ -569,7 +569,7 @@ _LANDING_HTML = """<!DOCTYPE html>
     <details>
       <summary>How do I set up ReStim?</summary>
       <p>In ReStim, enable the WebSocket server &mdash; it defaults to port 12346. ReDrive connects to <code>ws://localhost:12346</code>. See the
-      <a href="https://github.com/siotour/restim" target="_blank" rel="noopener">ReStim GitHub</a>
+      <a href="https://github.com/diglet48/restim" target="_blank" rel="noopener">ReStim GitHub</a>
       for setup help.</p>
     </details>
 
