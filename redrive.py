@@ -496,7 +496,7 @@ DRIVER_HTML = r"""<!DOCTYPE html>
   <div id="hdr-row3">
     <!-- Poppers mode radios above the Poppers button -->
     <div style="flex:1;display:flex;flex-direction:column;gap:4px">
-      <div id="poppers-mode-row" style="display:flex;gap:10px;align-items:center">
+      <div id="poppers-mode-row" style="display:flex;gap:10px;align-items:center;justify-content:flex-end">
         <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:#999">
           <input type="radio" name="poppers-mode" value="normal" checked onchange="_poppersMode=this.value" style="accent-color:var(--accent);cursor:pointer">
           <span id="pm-lbl-normal" style="color:#fff">Normal</span>
