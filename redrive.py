@@ -1212,10 +1212,6 @@ TOUCH_HTML = r"""
     <div style="display:flex;gap:8px" id="elec-tip"></div>
   </div>
   <div style="margin-bottom:10px">
-    <div style="font-size:10px;color:var(--fg2);font-weight:bold;letter-spacing:0.08em;margin-bottom:6px">SHAFT</div>
-    <div style="display:flex;gap:8px" id="elec-shaft"></div>
-  </div>
-  <div style="margin-bottom:10px">
     <div style="font-size:10px;color:var(--fg2);font-weight:bold;letter-spacing:0.08em;margin-bottom:6px">BALLS</div>
     <div style="display:flex;gap:8px" id="elec-balls"></div>
   </div>
@@ -1257,22 +1253,22 @@ let _loopStart  = 0;    // performance.now() when looping began
 let _loopDur    = 0;    // duration of one loop cycle (ms)
 
 // Electrode assignment: tip/balls/anus -> A/B/C label
-// A = beta 0 (one physical end), B = beta 9999 (other end), C = beta 5000 (neutral)
-const ELEC_BETA  = { A:0, B:3333, C:6666, D:9999 };
-const ANAT_YF    = { tip:0.0, shaft:0.33, balls:0.66, anus:1.0 };
-const ELEC_COLOR = { A:'#ff3333', B:'#4499ff', C:'#ffdd00', D:'#44cc70' };
+// FOC box wires left→right: Red(A), Blue(B), Yellow(C)  — Green(D) reserved for future
+const ELEC_BETA  = { A:0, B:9999, C:5000 };
+const ANAT_YF    = { tip:0.0, balls:0.5, anus:1.0 };
+const ELEC_COLOR = { A:'#ff3333', B:'#4499ff', C:'#ffdd00' };
 
 let elecAt = JSON.parse(localStorage.getItem('elecAt') || 'null')
-          || { tip:'A', shaft:'B', balls:'C', anus:'D' };
+          || { tip:'B', balls:'C', anus:'A' };
 
 function saveElecAt() { localStorage.setItem('elecAt', JSON.stringify(elecAt)); }
 
 function buildElecSheet() {
-  ['tip','shaft','balls','anus'].forEach(anat => {
+  ['tip','balls','anus'].forEach(anat => {
     const container = document.getElementById('elec-' + anat);
     if (!container) return;
     container.innerHTML = '';
-    ['A','B','C','D'].forEach(elec => {
+    ['A','B','C'].forEach(elec => {
       const btn = document.createElement('button');
       btn.textContent = elec;
       btn.style.cssText = `flex:1;min-height:48px;border-radius:8px;border:2px solid ${ELEC_COLOR[elec]};background:${elecAt[anat]===elec ? ELEC_COLOR[elec]+'33' : 'var(--bg3)'};color:${ELEC_COLOR[elec]};font-size:18px;font-weight:bold;cursor:pointer;touch-action:manipulation;transition:background 0.15s`;
