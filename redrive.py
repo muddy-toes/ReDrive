@@ -628,6 +628,8 @@ DRIVER_HTML = r"""<!DOCTYPE html>
 
 <div id="touch-panel" style="display:none;flex-direction:column;gap:5px">
   <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
+    <button onclick="toggleMode()" title="Back to controls"
+      style="padding:8px 10px;background:var(--bg3);border:1px solid var(--border);color:var(--fg2);border-radius:6px;font-size:13px;cursor:pointer;flex-shrink:0">&#8592;</button>
     <div id="tc-conn" style="display:flex;align-items:center;gap:5px">
       <div id="tc-dot" style="width:9px;height:9px;border-radius:50%;background:var(--err);flex-shrink:0"></div>
       <span id="tc-txt" style="color:var(--fg2);font-size:11px">Connected</span>
@@ -1209,8 +1211,15 @@ function toggleMode() {
     _driverMode === 'controls' ? '\uD83D\uDD90 Touch' : '\uD83C\uDFDB Controls';
   if (_driverMode === 'touch') {
     initTouchPanel();
-    // Single rAF is enough — fixed overlay has immediate viewport dimensions
-    requestAnimationFrame(tcDraw);
+    const _tcUntil=Date.now()+3000;
+    (function syncTcDraw(){
+      const w=document.getElementById('tc-main');
+      const c=document.getElementById('touch-canvas');
+      if(w&&w.offsetHeight>10){
+        if(!c||c.width!==w.offsetWidth||c.height!==w.offsetHeight){tcDraw();}
+      }
+      if(Date.now()<_tcUntil){requestAnimationFrame(syncTcDraw);}
+    })();
   }
 }
 
