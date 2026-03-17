@@ -1742,978 +1742,196 @@ TOUCH_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>ReStim Drive &middot; Touch</title>
+<title>ReDrive &middot; Rider</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --bg:#111; --bg2:#1a1a1a; --bg3:#222;
     --border:#2a2a2a; --fg:#fff; --fg2:#999;
     --accent:#5fa3ff; --ok:#4caf50; --err:#f44336; --warn:#ff9800;
-    --e1:#ff4444; --e2:#4488ff; --e3:#ffcc14; --e4:#44cc70;
   }
-  html, body { height: 100%; overflow: hidden; }
+  html, body { height: 100%; }
   body {
     background: var(--bg); color: var(--fg);
     font-family: Arial, sans-serif; font-size: 14px;
     display: flex; flex-direction: column;
-    padding: 8px; padding-top: calc(8px + env(safe-area-inset-top));
-    max-width: 480px; margin: 0 auto; gap: 5px;
-    user-select: none; -webkit-user-select: none; touch-action: none;
+    padding: 10px; padding-top: calc(10px + env(safe-area-inset-top));
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+    max-width: 480px; margin: 0 auto; gap: 10px;
+    user-select: none; -webkit-user-select: none;
   }
-  .top-row { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  /* Header */
+  #header { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  #conn   { display:flex; align-items:center; gap:5px; }
+  #cdot   { width:9px; height:9px; border-radius:50%; background:var(--err); flex-shrink:0; }
+  #ctxt   { color:var(--fg2); font-size:11px; }
+  #rider-name-input {
+    flex:1; min-width:0; background:var(--bg3); border:1px solid var(--border);
+    border-radius:5px; color:#fff; font-size:12px; padding:6px 8px;
+  }
   #stop-btn {
-    flex: 1; padding: 10px; background: var(--err); color: #fff;
-    border: none; border-radius: 6px; font-size: 14px; font-weight: bold;
-    cursor: pointer; letter-spacing: .08em;
+    background:var(--err); color:#fff; border:none; border-radius:6px;
+    font-size:13px; font-weight:bold; padding:7px 12px; cursor:pointer; flex-shrink:0;
   }
-  #stop-btn:active { background: #c62828; }
-  #nav-link {
-    color: var(--fg2); font-size: 11px; text-decoration: none;
-    white-space: nowrap; border: 1px solid var(--border);
-    border-radius: 4px; padding: 4px 7px;
-    background: none; cursor: pointer;
+  #stop-btn:active { background:#c62828; }
+  /* Driven by */
+  #driven-by { display:none; text-align:center; font-size:12px; color:#888; flex-shrink:0; }
+  #driven-by strong { color:var(--accent); }
+  /* Riders panel */
+  #riders-panel { display:none; gap:12px; justify-content:center; flex-wrap:wrap; flex-shrink:0; }
+  .rider-card { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .rider-avatar {
+    width:54px; height:76px; border-radius:8px; border:2px solid var(--border);
+    background:var(--bg3); background-size:cover; background-position:top center;
   }
-  #conn { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
-  #cdot { width: 9px; height: 9px; border-radius: 50%; background: var(--err); flex-shrink: 0; }
-  #ctxt { color: var(--fg2); font-size: 11px; }
-  #main-area { flex: 1; min-height: 0; display: flex; position: relative; }
-  #anatomy-wrap { flex: 1; min-width: 0; min-height: 300px; height: 100%; position: relative; border-radius: 6px; }
-  @keyframes loop-pulse {
-    0%,100% { box-shadow: 0 0 0 0 rgba(95,163,255,0.5); }
-    50%      { box-shadow: 0 0 0 8px rgba(95,163,255,0); }
+  .rider-name { font-size:10px; color:var(--fg2); max-width:60px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
+  /* Power bar */
+  #power-section { flex-shrink:0; }
+  #power-label { font-size:10px; color:var(--fg2); letter-spacing:.06em; margin-bottom:5px; }
+  #power-bar-wrap {
+    position:relative; height:38px; border-radius:8px;
+    background:var(--bg3); border:1px solid var(--border); overflow:hidden;
   }
-  #anatomy-wrap.looping { animation: loop-pulse 1.1s ease-in-out infinite; }
-  #anatomy { width: 100%; height: 100%; display: block; border-radius: 6px; cursor: none; touch-action: none; }
-  #tool-bar {
-    display: flex;
-    flex-direction: row;
-    gap: 6px;
-    padding: 8px 12px;
-    padding-bottom: calc(8px + env(safe-area-inset-bottom));
-    background: var(--bg2);
-    border-top: 1px solid var(--border);
-    flex-shrink: 0;
+  #power-bar {
+    position:absolute; inset:0; width:0%;
+    background:linear-gradient(to right,#44cc70,#ffcc14,#ff8800,#ff4444);
+    background-size:480px 100%; border-radius:8px; transition:width 0.35s ease;
   }
-  .tool-btn {
-    flex: 1;
-    min-height: 52px;
-    background: var(--bg3);
-    color: var(--fg2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-size: 22px;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-    padding: 6px 4px;
-    touch-action: manipulation;
+  #power-pct {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:15px; font-weight:bold; color:#fff; text-shadow:0 1px 4px rgba(0,0,0,0.9);
   }
-  .tool-btn span { font-size: 10px; line-height: 1; }
-  .tool-btn.active { font-weight: bold; }
-  .tool-btn[data-tool="feather"].active { background:#141428; border-color:#88aaff; color:#88aaff; }
-  .tool-btn[data-tool="hand"].active    { background:#1e1e1e; border-color:#ffffff; color:#ffffff; }
-  .tool-btn[data-tool="stroker"].active { background:#241400; border-color:#ff8800; color:#ff8800; }
-  #anatomy-picker {
-    display: flex; gap: 6px; overflow-x: auto; flex: 1;
-    padding: 2px 0 4px; min-height: 70px; align-items: flex-start;
-    min-width: 0;
+  @keyframes power-pulse { 0%,100%{opacity:1} 50%{opacity:0.65} }
+  #power-bar.live { animation:power-pulse 1.3s ease-in-out infinite; }
+  /* Emote grid */
+  #emote-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:8px; flex-shrink:0; }
+  .emote-btn {
+    aspect-ratio:1; background:var(--bg3); border:1px solid var(--border);
+    border-radius:10px; font-size:24px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    touch-action:manipulation; transition:transform 0.08s, border-color 0.12s;
   }
-  .anat-thumb {
-    width: 48px; height: 64px; border-radius: 6px; cursor: pointer;
-    border: 2px solid var(--border); flex-shrink: 0; overflow: hidden;
-    background: var(--bg3); position: relative; touch-action: manipulation;
+  .emote-btn:active { transform:scale(0.82); border-color:var(--accent); }
+  /* Footer */
+  #footer {
+    display:flex; align-items:center; justify-content:space-between;
+    flex-shrink:0; margin-top:auto; padding-top:4px;
   }
-  .anat-thumb canvas, .anat-thumb img { width: 100%; height: 100%; display: block; object-fit: cover; }
-  .anat-thumb.active { border-color: var(--accent); }
-  .anat-thumb-label {
-    position: absolute; bottom: 0; left: 0; right: 0; font-size: 8px;
-    text-align: center; background: rgba(0,0,0,0.60); padding: 2px 0;
-    color: var(--fg2); pointer-events: none;
+  #room-code-btn {
+    padding:4px 10px; background:none; border:1px solid var(--border);
+    border-radius:4px; color:var(--accent); font-size:11px;
+    font-family:monospace; letter-spacing:.1em; cursor:pointer;
   }
-  .info-row { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
-  #astatus { color: var(--fg2); font-size: 11px; font-family: monospace; }
-  .legend { display: flex; gap: 8px; }
-  .leg { font-size: 10px; color: var(--fg2); display: flex; align-items: center; gap: 3px; }
-  .ldot { width: 8px; height: 8px; border-radius: 50%; }
-  #bottle-btn {
-    padding: 8px 10px; background: var(--bg3); color: var(--fg2);
-    border: 1px solid var(--border); border-radius: 5px;
-    font-size: 16px; cursor: pointer; flex-shrink: 0;
+  #leave-btn {
+    padding:4px 10px; background:none; border:1px solid var(--border);
+    border-radius:4px; color:var(--fg2); font-size:11px; cursor:pointer;
   }
-  #bottle-btn.active { background: #2a1e00; border-color: var(--warn); }
-  #bottle-row { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-  .like-btn {
-    min-height: 52px;
-    min-width: 44px;
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-size: 22px;
-    cursor: pointer;
-    touch-action: manipulation;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    transition: transform 0.1s;
-  }
-  .like-btn:active { transform: scale(0.88); }
   /* Bottle overlay */
   #bottle-overlay {
-    display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,0.93); z-index: 9999;
-    flex-direction: column; align-items: center; justify-content: center;
-    gap: 12px;
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.93); z-index:9999;
+    flex-direction:column; align-items:center; justify-content:center; gap:14px;
   }
 </style>
 </head>
 <body>
 
-<div class="top-row">
+<div id="header">
   <div id="conn"><div id="cdot"></div><span id="ctxt">Connecting&#8230;</span></div>
+  <input id="rider-name-input" placeholder="Your name" maxlength="30">
   <button id="stop-btn" onclick="doStop()">&#9632; STOP</button>
-  <button id="bottle-btn" onclick="sendBottle()" title="Poppers Prompt"><img src="/bottle.png" style="width:20px;height:20px;object-fit:contain;vertical-align:middle" onerror="this.outerHTML='&#129749;'"></button>
-  <button id="room-code-btn" style="display:none;padding:4px 8px;background:none;
-    border:1px solid #2a2a2a;border-radius:4px;color:#5fa3ff;font-size:11px;
-    font-family:monospace;letter-spacing:.1em;cursor:pointer;white-space:nowrap"
-    onclick="touchCopyCode(this)" title="Tap to copy room code"></button>
-  <input id="rider-name-input" placeholder="Your name" maxlength="30"
-    style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:5px;
-           color:#fff;font-size:11px;padding:3px 7px;width:110px;flex-shrink:0">
-  <button id="nav-link" onclick="if(window.parent!==window){window.parent.postMessage('close-touch','*');}else{window.location='/';}">Main &#8599;</button>
-</div>
-<div id="driven-by" style="display:none;text-align:center;font-size:11px;
-  color:#888;padding:2px 0 4px">Driven by <strong id="driven-by-name" style="color:#5fa3ff"></strong></div>
-<div id="riders-panel" style="display:flex;justify-content:center;gap:0;margin:2px 0 4px"></div>
-<div id="bottle-row">
-  <span style="font-size:10px;color:var(--fg2);white-space:nowrap">Poppers</span>
-  <input type="range" id="bottle-dur" min="5" max="15" value="10" style="flex:1"
-         oninput="document.getElementById('bottle-dur-val').textContent=this.value+'s'">
-  <span id="bottle-dur-val" style="font-size:10px;color:var(--warn);min-width:22px">10s</span>
 </div>
 
-<div id="main-area">
-  <div id="anatomy-wrap">
-    <canvas id="anatomy"></canvas>
-    <button id="elec-toggle-btn" title="Electrode assignment" style="position:absolute;bottom:8px;right:8px;width:32px;height:32px;background:rgba(30,30,30,0.85);border:1px solid #333;border-radius:50%;color:#666;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation;z-index:10">&#9881;</button>
+<div id="driven-by">Driven by <strong id="driven-by-name"></strong></div>
+
+<div id="riders-panel"></div>
+
+<div id="power-section">
+  <div id="power-label">POWER</div>
+  <div id="power-bar-wrap">
+    <div id="power-bar"></div>
+    <div id="power-pct">&#8212;</div>
   </div>
 </div>
 
-<div id="tool-bar">
-  <button class="tool-btn active" data-tool="feather" onclick="selectTool(this)">
-    &#129302;<span>Feather</span>
-  </button>
-  <button class="tool-btn" data-tool="hand" onclick="selectTool(this)">
-    &#9995;<span>Hand</span>
-  </button>
-  <button class="tool-btn" data-tool="stroker" onclick="selectTool(this)">
-    &#9889;<span>Stroker</span>
-  </button>
-  <div style="width:1px;background:#2a2a2a;margin:6px 2px;flex-shrink:0"></div>
-  <button class="like-btn" onclick="sendLike('😍')">😍</button>
-  <button class="like-btn" onclick="sendLike('⚡')">⚡</button>
-  <button class="like-btn" onclick="sendLike('💦')">💦</button>
+<div id="emote-grid">
+  <button class="emote-btn" onclick="sendLike('😍')">😍</button>
+  <button class="emote-btn" onclick="sendLike('⚡')">⚡</button>
+  <button class="emote-btn" onclick="sendLike('💦')">💦</button>
+  <button class="emote-btn" onclick="sendLike('🔥')">🔥</button>
+  <button class="emote-btn" onclick="sendLike('👋')">👋</button>
+  <button class="emote-btn" onclick="sendLike('😈')">😈</button>
+</div>
+
+<div id="footer">
+  <button id="room-code-btn" onclick="copyRoomCode(this)"></button>
+  <button id="leave-btn" onclick="window.location='/'">Leave &#8599;</button>
 </div>
 
 <div id="bottle-overlay">
-  <img id="bottle-overlay-img" src="/bottle.png" style="max-width:60vmin;max-height:50vmin;object-fit:contain;border-radius:8px">
-  <div id="bottle-overlay-heading" style="color:#fff;font-size:1.5rem;font-weight:bold;text-align:center"></div>
-  <div id="bottle-overlay-sub" style="color:#ffcc14;font-size:1rem;text-align:center"></div>
-  <div id="bottle-overlay-dots" style="display:flex;justify-content:center;flex-wrap:wrap;gap:4px"></div>
-  <div id="bottle-overlay-cd" style="color:#fff;font-size:1.1rem;font-family:monospace;opacity:0.7"></div>
-</div>
-
-<div id="elec-sheet-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100" onclick="closeElecSheet()"></div>
-<div id="elec-sheet" style="position:fixed;bottom:-100%;left:0;right:0;background:var(--bg2);border-top:2px solid var(--border);border-radius:16px 16px 0 0;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom));z-index:101;transition:bottom 0.25s ease">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <div style="font-size:13px;font-weight:bold;color:var(--fg)">Electrode Assignment</div>
-    <button onclick="closeElecSheet()" style="background:none;border:none;color:var(--fg2);font-size:20px;cursor:pointer;padding:4px 8px">&#10005;</button>
-  </div>
-  <div style="margin-bottom:10px">
-    <div style="font-size:10px;color:var(--fg2);font-weight:bold;letter-spacing:0.08em;margin-bottom:6px">TIP</div>
-    <div style="display:flex;gap:8px" id="elec-tip"></div>
-  </div>
-  <div style="margin-bottom:10px">
-    <div style="font-size:10px;color:var(--fg2);font-weight:bold;letter-spacing:0.08em;margin-bottom:6px">BALLS</div>
-    <div style="display:flex;gap:8px" id="elec-balls"></div>
-  </div>
-  <div>
-    <div style="font-size:10px;color:var(--fg2);font-weight:bold;letter-spacing:0.08em;margin-bottom:6px">ANUS</div>
-    <div style="display:flex;gap:8px" id="elec-anus"></div>
-  </div>
-</div>
-
-<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;padding:2px 0 0">
-  <button id="upload-anat-btn" onclick="triggerAnatUpload()"
-          title="Upload custom anatomy image"
-          style="flex-shrink:0;padding:6px 10px;background:var(--bg3);border:1px solid var(--border);
-                 border-radius:6px;color:var(--fg2);font-size:14px;cursor:pointer;
-                 touch-action:manipulation;white-space:nowrap">
-    &#128228; Upload
-  </button>
-  <div id="anatomy-picker" style="flex:1;min-width:0;display:flex;gap:6px;overflow-x:auto;padding:2px 0 4px;min-height:70px;align-items:flex-start"></div>
-</div>
-<input type="file" id="anat-file-input" accept="image/png,image/jpeg,image/webp"
-       style="display:none" onchange="onAnatFileSelected(this)">
-<div id="anat-upload-status" style="font-size:11px;color:var(--fg2);height:14px;flex-shrink:0"></div>
-
-<div class="info-row">
-  <span id="astatus">Tap or drag &middot; Y = position &middot; X = intensity</span>
-  <div style="display:flex;align-items:center;gap:6px">
-    <button id="conn-toggle-btn" onclick="openElecSheet()"
-            style="padding:3px 8px;background:var(--bg3);border:1px solid var(--border);
-                   border-radius:4px;color:var(--fg2);font-size:11px;cursor:pointer;
-                   white-space:nowrap;touch-action:manipulation">&#9881; Connections</button>
-    <div class="legend">
-      <div class="leg"><div class="ldot" style="background:var(--e1)"></div>Red</div>
-      <div class="leg"><div class="ldot" style="background:var(--e2)"></div>Blue</div>
-      <div class="leg"><div class="ldot" style="background:var(--e3)"></div>Neutral</div>
-      <div class="leg"><div class="ldot" style="background:var(--e4)"></div>Green</div>
-    </div>
-  </div>
+  <img src="/bottle.png" style="max-width:55vmin;max-height:40vmin;object-fit:contain;border-radius:8px">
+  <div id="bottle-overlay-heading" style="color:#fff;font-size:1.7rem;font-weight:bold;text-align:center"></div>
+  <div id="bottle-overlay-sub"     style="color:#ffcc14;font-size:1.1rem;text-align:center"></div>
+  <div id="bottle-overlay-dots"    style="display:flex;justify-content:center;flex-wrap:wrap;gap:4px"></div>
+  <div id="bottle-overlay-cd"      style="color:#fff;font-size:1.2rem;font-family:monospace;opacity:0.7"></div>
 </div>
 
 <script>
-const TOOLS = {
-  feather: { min:0.08, max:0.55, color:'#88aaff', cursorW:0.88, multiplier:0.35, power:1.5 },
-  hand:    { min:0.25, max:0.80, color:'#ffffff', cursorW:0.55, multiplier:0.75, power:1.0 },
-  stroker: { min:0.55, max:1.00, color:'#ff8800', cursorW:0.35, multiplier:1.00, power:0.8 },
-};
-let currentTool = 'feather';
-let serverIntensity = 0.5;  // updated by state poll; used as baseIntensity for tool curves
-let pointerDown = false;
-let lastBeta    = 5000;
-let lastX       = 0.5;
-let lastY       = 0.5;
-let gestureRec  = [];
-let gestureStart= 0;
-let looping     = false;
-let _trail      = [];   // [{x,y,t}] ghostly trail points
-let _gesturePath= [];   // [{t,x,y}] canvas path recorded during draw (ms)
-let _loopStart  = 0;    // performance.now() when looping began
-let _loopDur    = 0;    // duration of one loop cycle (ms)
-
-// Electrode assignment: tip/balls/anus -> 1/2/3/4 (FOC box: Red/Blue/Yellow/Green)
-// FOC box wires left→right: Red(1), Blue(2), Neutral/Yellow(3), Green(4)
-const ELEC_BETA  = { '1':0, '2':2500, '3':7500, '4':9999 };
-const ANAT_YF    = { tip:0.0, balls:0.5, anus:1.0 };
-const ELEC_COLOR = { '1':'#ff4444', '2':'#4488ff', '3':'#ffcc14', '4':'#44cc70' };
-const ELEC_LABEL = { '1':'Red', '2':'Blue', '3':'Neutral', '4':'Green' };
-
-let elecAt = JSON.parse(localStorage.getItem('elecAt') || 'null')
-          || { tip:'2', balls:'3', anus:'1' };
-
-function saveElecAt() { localStorage.setItem('elecAt', JSON.stringify(elecAt)); }
-
-function buildElecSheet() {
-  ['tip','balls','anus'].forEach(anat => {
-    const container = document.getElementById('elec-' + anat);
-    if (!container) return;
-    container.innerHTML = '';
-    ['1','2','3','4'].forEach(elec => {
-      const btn = document.createElement('button');
-      btn.textContent = ELEC_LABEL[elec];
-      btn.style.cssText = `flex:1;min-height:48px;border-radius:8px;border:2px solid ${ELEC_COLOR[elec]};background:${elecAt[anat]===elec ? ELEC_COLOR[elec]+'33' : 'var(--bg3)'};color:${ELEC_COLOR[elec]};font-size:13px;font-weight:bold;cursor:pointer;touch-action:manipulation;transition:background 0.15s`;
-      btn.onclick = () => {
-        const prev = Object.entries(elecAt).find(([a,e]) => a !== anat && e === elec);
-        if (prev) elecAt[prev[0]] = elecAt[anat];
-        elecAt[anat] = elec;
-        localStorage.setItem('elecAt', JSON.stringify(elecAt));
-        buildElecSheet();
-        draw();
-      };
-      container.appendChild(btn);
-    });
-  });
-}
-
-function openElecSheet() {
-  buildElecSheet();
-  document.getElementById('elec-sheet-bg').style.display = 'block';
-  document.getElementById('elec-sheet').style.bottom = '0';
-  localStorage.setItem('elecSheetOpen', '1');
-}
-
-function closeElecSheet() {
-  document.getElementById('elec-sheet-bg').style.display = 'none';
-  document.getElementById('elec-sheet').style.bottom = '-100%';
-  localStorage.setItem('elecSheetOpen', '0');
-}
-
-document.getElementById('elec-toggle-btn').addEventListener('click', openElecSheet);
-// Restore collapsed state: sheet is hidden by default; only open if previously left open
-if (localStorage.getItem('elecSheetOpen') === '1') {
-  openElecSheet();
-}
-
-function betaFromY(y) {
-  const pts = Object.entries(elecAt)
-    .map(([anat, elec]) => ({ y: ANAT_YF[anat], beta: ELEC_BETA[elec] }))
-    .sort((a, b) => a.y - b.y);
-  if (y <= pts[0].y) return pts[0].beta;
-  if (y >= pts[pts.length-1].y) return pts[pts.length-1].beta;
-  for (let i = 0; i < pts.length - 1; i++) {
-    if (y >= pts[i].y && y <= pts[i+1].y) {
-      const f = (y - pts[i].y) / (pts[i+1].y - pts[i].y);
-      return Math.round(pts[i].beta + f * (pts[i+1].beta - pts[i].beta));
-    }
-  }
-  return 5000;
-}
-
-function intensityFromX(x) {
-  // Legacy: used only for cursor display label (X-axis band)
-  const t = TOOLS[currentTool]; return t.min + x * (t.max - t.min);
-}
-
-function intensityFromY(y) {
-  // Per-tool intensity curve: baseIntensity * multiplier * curve(y)
-  // y=0 is top (tip), y=1 is bottom.  We use y as the normalised position.
-  const t = TOOLS[currentTool];
-  const curved = Math.pow(Math.max(0, Math.min(1, y)), t.power);
-  return Math.max(0, Math.min(1, serverIntensity * t.multiplier * curved));
-}
-
-
-// ── Anatomy picker ─────────────────────────────────────────────────────────
-let anatVariants  = [];
-let currentAnatId = localStorage.getItem('anatId') || 'default';
-let customAnatImg = null;
-
-// ROOM_CODE is injected by the server when serving this page
+// ROOM_CODE injected by server
 const _ROOM_CODE = (typeof ROOM_CODE !== 'undefined') ? ROOM_CODE : null;
+const _BASE = _ROOM_CODE ? '/room/' + _ROOM_CODE : '';
 
-async function loadAnatomyList() {
-  anatVariants = [
-    { id:'default', label:'Default', type:'canvas', drawFn: drawAnatomyDetailed },
-    { id:'simple',  label:'Simple',  type:'canvas', drawFn: drawAnatomySimple   },
-  ];
-  try {
-    if (_ROOM_CODE) {
-      // Use room-scoped anatomy list (includes custom uploads)
-      const resp = await fetch('/room/' + _ROOM_CODE + '/anatomies');
-      if (resp.ok) {
-        const data = await resp.json();
-        // Custom uploads first
-        for (const f of (data.custom || []))
-          anatVariants.unshift({ id:f, label:f.split('/').pop().replace(/\.[^.]+$/, ''),
-                                 type:'png', src:'/touch_assets/anatomy/' + f, custom:true });
-        // Standard assets
-        for (const f of (data.standard || []))
-          anatVariants.push({ id:f, label:f.replace(/\.[^.]+$/, ''), type:'png',
-                              src:'/touch_assets/anatomy/' + encodeURIComponent(f) });
-      }
-    } else {
-      // Fallback: list from assets endpoint (standalone mode)
-      const resp = await fetch('/touch_assets/list?type=anatomy');
-      if (resp.ok) {
-        for (const f of await resp.json())
-          anatVariants.push({ id:f, label:f.replace(/\.[^.]+$/, ''), type:'png',
-                              src:'/touch_assets/anatomy/' + encodeURIComponent(f) });
-      }
-    }
-  } catch(_) {}
-  buildPicker();
-  applyAnatVariant(currentAnatId);
-}
-
-function triggerAnatUpload() {
-  document.getElementById('anat-file-input').click();
-}
-
-async function onAnatFileSelected(input) {
-  const file = input.files && input.files[0];
-  if (!file || !_ROOM_CODE) return;
-  input.value = '';  // reset so same file can be re-selected
-  const statusEl = document.getElementById('anat-upload-status');
-  statusEl.textContent = 'Uploading\u2026';
-  statusEl.style.color = 'var(--fg2)';
-  try {
-    const fd = new FormData();
-    fd.append('file', file);
-    const r = await fetch('/room/' + _ROOM_CODE + '/upload_anatomy', {
-      method: 'POST', body: fd
-    });
-    if (!r.ok) {
-      const txt = await r.text();
-      statusEl.textContent = 'Upload failed: ' + txt;
-      statusEl.style.color = 'var(--err)';
-      setTimeout(() => { statusEl.textContent = ''; }, 3000);
-      return;
-    }
-    const d = await r.json();
-    statusEl.textContent = 'Uploaded!';
-    statusEl.style.color = 'var(--ok)';
-    setTimeout(() => { statusEl.textContent = ''; }, 2000);
-    // Save as base64 for future sessions
-    const reader = new FileReader();
-    reader.onload = e => localStorage.setItem('reDriveAnatomyB64', e.target.result);
-    reader.readAsDataURL(file);
-    localStorage.setItem('reDriveAnatomyName', file.name);
-    _addCustomAnatomy(d.name);
-  } catch(e) {
-    statusEl.textContent = 'Upload error';
-    statusEl.style.color = 'var(--err)';
-    setTimeout(() => { statusEl.textContent = ''; }, 3000);
-  }
-}
-
-function _addCustomAnatomy(name) {
-  // Add to front if not already present
-  if (anatVariants.some(v => v.id === name)) {
-    selectAnat(name);
-    return;
-  }
-  anatVariants.unshift({
-    id: name,
-    label: name.split('/').pop().replace(/\.[^.]+$/, ''),
-    type: 'png',
-    src: '/touch_assets/anatomy/' + name,
-    custom: true,
-  });
-  buildPicker();
-  selectAnat(name);
-}
-
-async function autoUploadStoredAnatomy() {
-  if (!_ROOM_CODE) return;
-  const b64 = localStorage.getItem('reDriveAnatomyB64');
-  const name = localStorage.getItem('reDriveAnatomyName') || 'my_overlay.png';
-  if (!b64) return;
-  // Check if room already has custom anatomy
-  try {
-    const res = await fetch('/room/' + _ROOM_CODE + '/anatomies');
-    if (!res.ok) return;
-    const data = await res.json();
-    if (data.custom && data.custom.length > 0) return; // already has one
-  } catch(_) { return; }
-  // Convert base64 back to blob and upload
-  try {
-    const blob = await fetch(b64).then(r => r.blob());
-    const fd = new FormData();
-    fd.append('file', blob, name);
-    await fetch('/room/' + _ROOM_CODE + '/upload_anatomy', {method:'POST', body:fd});
-    // Reload anatomy list to show the freshly uploaded image
-    await loadAnatomyList();
-  } catch(_) {}
-}
-
-function buildPicker() {
-  const el = document.getElementById('anatomy-picker');
-  el.innerHTML = '';
-  for (const v of anatVariants) {
-    const wrap = document.createElement('div');
-    wrap.className = 'anat-thumb' + (v.id === currentAnatId ? ' active' : '');
-    wrap.title = v.label;
-    if (v.type === 'canvas') {
-      const tc = document.createElement('canvas');
-      tc.width = 48; tc.height = 64;
-      v.drawFn(tc.getContext('2d'), 48, 64, true);
-      wrap.appendChild(tc);
-    } else {
-      const img = document.createElement('img'); img.src = v.src; img.alt = v.label;
-      wrap.appendChild(img);
-    }
-    const lbl = document.createElement('div');
-    lbl.className = 'anat-thumb-label'; lbl.textContent = v.label;
-    wrap.appendChild(lbl);
-    if (v.custom) {
-      const forgetBtn = document.createElement('button');
-      forgetBtn.textContent = '\uD83D\uDDD1';
-      forgetBtn.title = 'Forget my overlay';
-      forgetBtn.style.cssText = 'position:absolute;top:2px;right:2px;width:16px;height:16px;' +
-        'padding:0;font-size:10px;line-height:1;background:rgba(30,0,0,0.85);' +
-        'border:none;border-radius:3px;color:#f44336;cursor:pointer;z-index:5;' +
-        'display:flex;align-items:center;justify-content:center;touch-action:manipulation';
-      forgetBtn.addEventListener('click', e => {
-        e.stopPropagation();
-        localStorage.removeItem('reDriveAnatomyB64');
-        localStorage.removeItem('reDriveAnatomyName');
-        // Remove from variants and refresh picker
-        const idx = anatVariants.indexOf(v);
-        if (idx !== -1) anatVariants.splice(idx, 1);
-        if (currentAnatId === v.id) selectAnat('default');
-        buildPicker();
-      });
-      wrap.appendChild(forgetBtn);
-    }
-    wrap.addEventListener('click', () => selectAnat(v.id));
-    el.appendChild(wrap);
-  }
-}
-
-function selectAnat(id) {
-  currentAnatId = id;
-  localStorage.setItem('anatId', id);
-  document.querySelectorAll('.anat-thumb').forEach((t, i) =>
-    t.classList.toggle('active', anatVariants[i] && anatVariants[i].id === id));
-  applyAnatVariant(id);
-}
-
-function applyAnatVariant(id) {
-  const v = anatVariants.find(a => a.id === id) || anatVariants[0];
-  if (v && v.type === 'png' && v.src) {
-    const img = new Image();
-    img.onload  = () => { customAnatImg = img; draw(); };
-    img.onerror = () => { customAnatImg = null; draw(); };
-    img.src = v.src;
-  } else { customAnatImg = null; draw(); }
-}
-
-// ── Tool cursor PNG overrides ──────────────────────────────────────────────
-const toolImages = {};
-
-async function loadToolImages() {
-  try {
-    const resp = await fetch('/touch_assets/list?type=tools');
-    if (resp.ok) {
-      for (const f of await resp.json()) {
-        const tool = f.replace(/\.[^.]+$/, '').toLowerCase();
-        if (tool in TOOLS) {
-          const img = new Image();
-          img.src = '/touch_assets/tools/' + encodeURIComponent(f);
-          img.onload = () => { toolImages[tool] = img; if (pointerDown) draw(); };
-        }
-      }
-    }
-  } catch(_) {}
-}
-
-const cvs = document.getElementById('anatomy');
-
-function selectTool(btn) {
-  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  currentTool = btn.dataset.tool;
-  draw();
-}
-
-function getPos(e) {
-  const rect = cvs.getBoundingClientRect(), src = e.touches ? e.touches[0] : e;
-  return {
-    x: Math.max(0, Math.min(1, (src.clientX - rect.left) / rect.width)),
-    y: Math.max(0, Math.min(1, (src.clientY - rect.top)  / rect.height)),
-  };
-}
-
-cvs.addEventListener('mousedown',    onDown, {passive:false});
-cvs.addEventListener('touchstart',   onDown, {passive:false});
-cvs.addEventListener('mousemove',    onMove, {passive:false});
-cvs.addEventListener('touchmove',    onMove, {passive:false});
-document.addEventListener('mouseup',     onUp);
-document.addEventListener('touchend',    onUp);
-document.addEventListener('touchcancel', onUp);
-
-function onDown(e) {
-  e.preventDefault();
-  pointerDown = true; gestureRec = []; gestureStart = performance.now();
-  _gesturePath = [];
-  const pos = getPos(e);
-  lastBeta = betaFromY(pos.y); lastX = pos.x; lastY = pos.y;
-  _trail = []; _trail.push({x:lastX, y:lastY, t:Date.now()});
-  _gesturePath.push({t:0, x:lastX, y:lastY});
-  gestureRec.push({t:0, beta:lastBeta, intensity:intensityFromY(pos.y)});
-  sendCmd({ gesture_stop:true, beta_mode:'hold', beta:lastBeta, intensity:intensityFromY(pos.y) });
-  setLooping(false); draw();
-}
-
-function onMove(e) {
-  if (!pointerDown) return;
-  e.preventDefault();
-  const pos = getPos(e);
-  lastBeta = betaFromY(pos.y); lastX = pos.x; lastY = pos.y;
-  _trail.push({x:lastX, y:lastY, t:Date.now()}); if (_trail.length>60) _trail.shift();
-  const _gt = (performance.now()-gestureStart);
-  _gesturePath.push({t:_gt, x:lastX, y:lastY});
-  gestureRec.push({t:_gt/1000, beta:lastBeta, intensity:intensityFromY(pos.y)});
-  sendCmd({ beta:lastBeta, intensity:intensityFromY(pos.y) });
-  draw();
-}
-
-function onUp() {
-  if (!pointerDown) return;
-  pointerDown = false;
-  const dur = gestureRec.length >= 2 ? gestureRec[gestureRec.length-1].t : 0;
-
-  if (dur >= 0.5 && gestureRec.length >= 6) {
-    sendCmd({ gesture_record: subsample(gestureRec, 150) });
-    _loopStart = performance.now(); _loopDur = dur * 1000;
-    setLooping(true);
-    setStatus('Looping ' + dur.toFixed(1) + 's  drag to replace');
-    draw(); return;
-  }
-
-  const betas  = gestureRec.map(p => p.beta);
-  const minB   = Math.min(...betas), maxB = Math.max(...betas), rangeB = maxB - minB;
-
-  if (gestureRec.length < 4 || rangeB < 400) {
-    sendCmd({ beta_mode:'hold', beta:lastBeta });
-    setStatus('Hold ' + betaLabel(lastBeta) + '  ' + Math.round(intensityFromY(lastY)*100) + '%');
-    draw(); return;
-  }
-
-  const centre = Math.round((minB + maxB) / 2);
-  const width  = Math.round(rangeB / 2);
-  const dist   = betas.reduce((s,b,i) => i>0 ? s+Math.abs(b-betas[i-1]) : 0, 0);
-  const hz     = Math.min(3.0, Math.max(0.05, dist / Math.max(0.1,dur) / (2*Math.max(1,width))));
-  const avgInt = gestureRec.reduce((s,p) => s+p.intensity, 0) / gestureRec.length;
-  sendCmd({ intensity:avgInt, beta_mode:'sweep', beta_sweep:{centre, width, hz:Math.round(hz*100)/100} });
-  setStatus('Sweep ' + hz.toFixed(2) + ' Hz  ' + Math.round(avgInt*100) + '%');
-  draw();
-}
-
-function subsample(pts, maxN) {
-  if (pts.length <= maxN) return pts;
-  const t0 = pts[0].t, t1 = pts[pts.length-1].t, out = [];
-  for (let i = 0; i < maxN; i++) {
-    const t = t0 + (i/(maxN-1))*(t1-t0);
-    let j = 0;
-    while (j < pts.length-1 && pts[j+1].t < t) j++;
-    if (j >= pts.length-1) {
-      out.push({t:t-t0, beta:pts[j].beta, intensity:pts[j].intensity});
-    } else {
-      const f = (t-pts[j].t) / Math.max(0.001, pts[j+1].t-pts[j].t);
-      out.push({t:t-t0,
-        beta: Math.round(pts[j].beta + f*(pts[j+1].beta-pts[j].beta)),
-        intensity: pts[j].intensity + f*(pts[j+1].intensity-pts[j].intensity),
-      });
-    }
-  }
-  return out;
-}
-
-function betaLabel(v) {
-  let best = '1', bestDist = Infinity;
-  for (const [,elec] of Object.entries(elecAt)) {
-    const d = Math.abs(ELEC_BETA[elec] - v);
-    if (d < bestDist) { bestDist = d; best = elec; }
-  }
-  const entry = Object.entries(elecAt).find(([,e]) => e === best);
-  return ELEC_LABEL[best] + '(' + (entry ? entry[0] : '') + ')';
-}
-
-async function sendCmd(cmd) {
-  try {
-    const r = await fetch('/command', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cmd)});
-    setConn(r.ok);
-  } catch(_) { setConn(false); }
-}
-function doStop()    { sendCmd({stop:true}); setLooping(false); setStatus('Stopped'); }
-let _bottleTimer = null;
-function sendBottle() {
-  const dur = document.getElementById('bottle-dur').value;
-  fetch('/bottle?duration=' + dur, {method:'POST'});
-  const btn = document.getElementById('bottle-btn');
-  btn.classList.add('active');
-  if (_bottleTimer) clearTimeout(_bottleTimer);
-  _bottleTimer = setTimeout(() => btn.classList.remove('active'), dur * 1000);
-}
+// ── Connection status ────────────────────────────────────────────────────────
 function setConn(ok) {
   document.getElementById('cdot').style.background = ok ? 'var(--ok)' : 'var(--err)';
-  document.getElementById('ctxt').textContent = ok ? 'Connected' : 'Disconnected';
-}
-function touchCopyCode(btn) {
-  if (!btn || !btn.dataset.code) return;
-  navigator.clipboard.writeText(btn.dataset.code).then(() => {
-    const orig = btn.textContent;
-    btn.textContent = 'Copied!';
-    btn.style.color = 'var(--ok)';
-    clearTimeout(btn._ct);
-    btn._ct = setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1500);
-  });
-}
-function setStatus(m) { document.getElementById('astatus').textContent = m; }
-function setLooping(on) {
-  looping = on;
-  document.getElementById('anatomy-wrap').classList.toggle('looping', on);
+  document.getElementById('ctxt').textContent = ok ? 'Connected' : 'Connection lost \u2014 retrying\u2026';
 }
 
-// ── Drawing ────────────────────────────────────────────────────────────────
-function rgba(hex, a) {
-  const n = parseInt(hex.replace('#',''), 16);
-  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+// ── Power bar ────────────────────────────────────────────────────────────────
+function updatePower(v) {
+  v = Math.max(0, Math.min(1, v || 0));
+  const bar = document.getElementById('power-bar');
+  const pct = document.getElementById('power-pct');
+  bar.style.width = Math.round(v * 100) + '%';
+  pct.textContent = v > 0.01 ? Math.round(v * 100) + '%' : '\u2014';
+  v > 0.01 ? bar.classList.add('live') : bar.classList.remove('live');
 }
 
-function buildAnatGrad(ctx, W, H) {
-  const base = { '1':'255,68,68', '2':'68,136,255', '3':'255,204,20', '4':'68,204,112' };
-  const stops = Object.entries(elecAt)
-    .map(([anat,elec]) => ({ y:ANAT_YF[anat], c:base[elec] }))
-    .sort((a,b) => a.y - b.y);
-  const g = ctx.createLinearGradient(0,0,0,H);
-  stops.forEach((s, i) => {
-    const op = [0.82, 0.60, 0.44, 0.76][i] || 0.60;
-    g.addColorStop(s.y, `rgba(${s.c},${op})`);
-  });
-  return g;
+// ── STOP ─────────────────────────────────────────────────────────────────────
+function doStop() {
+  fetch(_BASE + '/command', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({stop:true})});
 }
 
-function drawAnatomyDetailed(ctx, W, H, thumb) {
-  const cx=W/2, GLY=0.07, SHT=0.15, SHB=0.44, SCY=0.50, PERY=0.72, ANY=0.88;
-  const shr=W*0.130, gr=W*0.195, gtv=H*0.055;
-  const slx=W*0.195, sla=W*0.205, slb=H*0.115;
-  const ar=Math.min(W*0.095,H*0.046), pr=W*0.062, lw=thumb?0.8:1.5;
-  ctx.clearRect(0,0,W,H); ctx.fillStyle='#1a1a1a'; ctx.fillRect(0,0,W,H);
-  const grad=buildAnatGrad(ctx,W,H);
-  const fill=()=>{ ctx.fillStyle=grad; ctx.fill(); ctx.strokeStyle='#2c3558'; ctx.lineWidth=lw; ctx.stroke(); };
-  // Perineum
-  ctx.beginPath();
-  ctx.moveTo(cx-pr,H*PERY);
-  ctx.bezierCurveTo(cx-pr*0.7,H*(PERY+ANY)/2,cx-ar*0.85,H*ANY-ar*0.7,cx-ar*0.85,H*ANY);
-  ctx.lineTo(cx+ar*0.85,H*ANY);
-  ctx.bezierCurveTo(cx+ar*0.85,H*ANY-ar*0.7,cx+pr*0.7,H*(PERY+ANY)/2,cx+pr,H*PERY);
-  ctx.closePath(); fill();
-  // Scrotum
-  ctx.beginPath(); ctx.ellipse(cx-slx,H*SCY+slb*0.18,sla*0.82,slb*0.86,0.08,0,Math.PI*2); fill();
-  ctx.beginPath(); ctx.ellipse(cx+slx,H*SCY+slb*0.18,sla*0.82,slb*0.86,-0.08,0,Math.PI*2); fill();
-  // Raphe
-  ctx.beginPath(); ctx.moveTo(cx,H*SCY-slb*0.12);
-  ctx.bezierCurveTo(cx+slb*0.04,H*SCY,cx-slb*0.04,H*(SCY+0.07),cx,H*(SCY+0.10));
-  ctx.strokeStyle='rgba(28,38,88,0.50)'; ctx.lineWidth=thumb?1:2; ctx.stroke();
-  // Shaft
-  ctx.beginPath();
-  ctx.moveTo(cx-shr*1.06,H*SHB); ctx.lineTo(cx-shr,H*SHT);
-  ctx.lineTo(cx+shr,H*SHT); ctx.lineTo(cx+shr*1.06,H*SHB);
-  ctx.closePath(); fill();
-  // Glans
-  ctx.beginPath(); ctx.ellipse(cx,H*GLY,gr,gtv,0,0,Math.PI*2); fill();
-  // Corona
-  ctx.beginPath();
-  ctx.moveTo(cx-gr*0.87,H*SHT+1);
-  ctx.bezierCurveTo(cx-gr*0.20,H*SHT+H*0.013,cx+gr*0.20,H*SHT+H*0.013,cx+gr*0.87,H*SHT+1);
-  ctx.strokeStyle='rgba(28,38,88,0.60)'; ctx.lineWidth=thumb?1:2.5; ctx.stroke();
-  // Anus
-  ctx.beginPath(); ctx.arc(cx,H*ANY,ar,0,Math.PI*2);
-  ctx.fillStyle='rgba(45,75,225,0.68)'; ctx.fill();
-  ctx.strokeStyle='#223298'; ctx.lineWidth=lw; ctx.stroke();
-  ctx.beginPath(); ctx.arc(cx,H*ANY,ar*0.50,0,Math.PI*2);
-  ctx.strokeStyle='rgba(90,130,255,0.32)'; ctx.lineWidth=1; ctx.stroke();
-  if (!thumb) {
-    const tg=ctx.createRadialGradient(cx,0,0,cx,0,H*0.42);
-    tg.addColorStop(0,'rgba(255,195,20,0.16)'); tg.addColorStop(1,'transparent');
-    ctx.fillStyle=tg; ctx.fillRect(0,0,W,H);
-    const bg=ctx.createRadialGradient(cx,H,0,cx,H,H*0.42);
-    bg.addColorStop(0,'rgba(50,70,240,0.16)'); bg.addColorStop(1,'transparent');
-    ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
-  }
+// ── Room code copy ────────────────────────────────────────────────────────────
+if (_ROOM_CODE) {
+  const btn = document.getElementById('room-code-btn');
+  btn.textContent = _ROOM_CODE;
+}
+function copyRoomCode(btn) {
+  if (!_ROOM_CODE) return;
+  const url = location.origin + '/room/' + _ROOM_CODE + '/touch';
+  navigator.clipboard.writeText(url)
+    .then(() => { const t = btn.textContent; btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = t, 1500); })
+    .catch(() => {});
 }
 
-function drawAnatomySimple(ctx, W, H, thumb) {
-  const cx=W/2;
-  ctx.clearRect(0,0,W,H); ctx.fillStyle='#1a1a1a'; ctx.fillRect(0,0,W,H);
-  const grad=buildAnatGrad(ctx,W,H);
-  ctx.beginPath();
-  ctx.moveTo(cx,H*0.02);
-  ctx.bezierCurveTo(cx+W*0.17,H*0.05,cx+W*0.22,H*0.20,cx+W*0.31,H*0.48);
-  ctx.bezierCurveTo(cx+W*0.33,H*0.55,cx+W*0.20,H*0.66,cx+W*0.11,H*0.80);
-  ctx.bezierCurveTo(cx+W*0.05,H*0.91,cx+W*0.03,H*0.96,cx,H*0.97);
-  ctx.bezierCurveTo(cx-W*0.03,H*0.96,cx-W*0.05,H*0.91,cx-W*0.11,H*0.80);
-  ctx.bezierCurveTo(cx-W*0.20,H*0.66,cx-W*0.33,H*0.55,cx-W*0.31,H*0.48);
-  ctx.bezierCurveTo(cx-W*0.22,H*0.20,cx-W*0.17,H*0.05,cx,H*0.02);
-  ctx.closePath();
-  ctx.fillStyle=grad; ctx.fill();
-  ctx.strokeStyle='#3a4a90'; ctx.lineWidth=thumb?1:2; ctx.stroke();
-  if (!thumb) {
-    ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=1; ctx.setLineDash([3,4]);
-    for (const yf of [0.44, 0.56]) {
-      ctx.beginPath(); ctx.moveTo(W*0.12,H*yf); ctx.lineTo(W*0.88,H*yf); ctx.stroke();
-    }
-    ctx.setLineDash([]);
-    const tg=ctx.createRadialGradient(cx,0,0,cx,0,H*0.50);
-    tg.addColorStop(0,'rgba(255,195,20,0.14)'); tg.addColorStop(1,'transparent');
-    ctx.fillStyle=tg; ctx.fillRect(0,0,W,H);
-    const bg=ctx.createRadialGradient(cx,H,0,cx,H,H*0.50);
-    bg.addColorStop(0,'rgba(50,70,240,0.14)'); bg.addColorStop(1,'transparent');
-    ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
-  }
-}
-
-function drawElecLabels(ctx, W, H) {
-  const GLY=0.07, SHT=0.15, SHB=0.44, SCY=0.50, ANY=0.88;
-  const slb=H*0.115, ar=Math.min(W*0.095,H*0.046), gtv=H*0.055, cx=W/2;
-  for (const [anat, elec] of Object.entries(elecAt)) {
-    let lblY;
-    if (anat==='tip')   lblY = H*GLY + gtv + 14;
-    if (anat==='shaft') lblY = H*((SHT+SHB)/2) + 14;
-    if (anat==='balls') lblY = H*SCY + slb + 14;
-    if (anat==='anus')  lblY = H*ANY + ar  + 14;
-    if (lblY === undefined) lblY = H * ANAT_YF[anat] + 14;
-    ctx.font='bold 10px Arial'; ctx.textAlign='right'; ctx.fillStyle=ELEC_COLOR[elec];
-    ctx.fillText(ELEC_LABEL[elec], cx+W*0.44, lblY-2);
-    ctx.font='9px Arial'; ctx.textAlign='center'; ctx.fillStyle='rgba(180,180,200,0.58)';
-    ctx.fillText(anat, cx, lblY);
-  }
-}
-
-function drawToolBand(ctx, W, H) {
-  const t=TOOLS[currentTool], xL=t.min*W, xR=t.max*W;
-  ctx.fillStyle=rgba(t.color,0.07); ctx.fillRect(xL,0,xR-xL,H);
-  ctx.fillStyle=rgba(t.color,0.28); ctx.fillRect(xL,0,2,3); ctx.fillRect(xR-2,0,2,3);
-}
-
-function drawToolCursor(ctx, W, H) {
-  const tool=TOOLS[currentTool], curX=lastX*W, curY=lastY*H;
-  const cw=W*tool.cursorW, ch=Math.max(16,cw*0.16);
-  if (toolImages[currentTool]) {
-    const img=toolImages[currentTool], iw=cw, ih=iw*(img.height/img.width);
-    ctx.save(); ctx.globalAlpha=0.70; ctx.drawImage(img,curX-iw/2,curY-ih/2,iw,ih); ctx.restore();
-  } else {
-    const glow=ctx.createRadialGradient(curX,curY,0,curX,curY,cw*0.56);
-    glow.addColorStop(0,rgba(tool.color,0.26)); glow.addColorStop(0.65,rgba(tool.color,0.10)); glow.addColorStop(1,rgba(tool.color,0));
-    ctx.fillStyle=glow; ctx.beginPath(); ctx.ellipse(curX,curY,cw*0.56,ch*0.95,0,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(curX,curY,cw*0.50,ch*0.78,0,0,Math.PI*2);
-    ctx.strokeStyle=rgba(tool.color,0.48); ctx.lineWidth=1.5; ctx.stroke();
-    ctx.strokeStyle=rgba(tool.color,0.38); ctx.lineWidth=1;
-    if (currentTool==='feather') {
-      ctx.beginPath(); ctx.moveTo(curX-cw*0.46,curY); ctx.lineTo(curX+cw*0.46,curY); ctx.stroke();
-      for (let bx=-0.40; bx<=0.40; bx+=0.10) {
-        ctx.beginPath(); ctx.moveTo(curX+cw*bx,curY); ctx.lineTo(curX+cw*bx+cw*0.04,curY-ch*0.48); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(curX+cw*bx,curY); ctx.lineTo(curX+cw*bx-cw*0.04,curY+ch*0.48); ctx.stroke();
-      }
-    } else if (currentTool==='hand') {
-      for (let fi=-2; fi<=2; fi++) {
-        ctx.beginPath(); ctx.moveTo(curX+fi*cw*0.09,curY); ctx.lineTo(curX+fi*cw*0.09,curY-ch*0.58); ctx.stroke();
-      }
-    } else {
-      ctx.strokeStyle=rgba(tool.color,0.55); ctx.lineWidth=2;
-      ctx.beginPath();
-      ctx.moveTo(curX-cw*0.10,curY-ch*0.55); ctx.lineTo(curX+cw*0.04,curY-ch*0.05);
-      ctx.lineTo(curX-cw*0.04,curY+ch*0.05); ctx.lineTo(curX+cw*0.10,curY+ch*0.55); ctx.stroke();
-    }
-  }
-  ctx.fillStyle=rgba(tool.color,0.80); ctx.font='bold 10px Arial'; ctx.textAlign='left';
-  ctx.fillText(Math.round(intensityFromY(lastY)*100)+'%', curX+cw*0.52+3, curY-3);
-  const tkR=W*0.30; ctx.strokeStyle=rgba(tool.color,0.40); ctx.lineWidth=1; ctx.setLineDash([3,4]);
-  ctx.beginPath(); ctx.moveTo(W/2-tkR,curY); ctx.lineTo(W/2+tkR,curY); ctx.stroke();
-  ctx.setLineDash([]);
-}
-
-function drawTrail(ctx, W, H) {
-  if (_trail.length < 2) return;
-  const now = Date.now(), FADE = 1800; // ms to fully fade
-  for (let i = 0; i < _trail.length; i++) {
-    const p = _trail[i];
-    const age = now - p.t;
-    if (age > FADE) continue;
-    const f = 1 - age / FADE;          // 1=fresh, 0=gone
-    const r = 4 + f * 8;               // radius shrinks with age
-    ctx.beginPath();
-    ctx.arc(p.x * W, p.y * H, r, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(95,163,255,${(f * f * 0.55).toFixed(3)})`;
-    ctx.fill();
-  }
-  // bright head dot
-  const head = _trail[_trail.length - 1];
-  ctx.beginPath();
-  ctx.arc(head.x * W, head.y * H, 6, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(95,163,255,0.90)';
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(head.x * W, head.y * H, 10, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(95,163,255,0.35)';
-  ctx.lineWidth = 2; ctx.stroke();
-}
-
-function draw() {
-  const wrap=document.getElementById('anatomy-wrap');
-  const W=wrap.offsetWidth, H=wrap.offsetHeight;
-  if (W<10||H<10) return;
-  cvs.width=W; cvs.height=H;
-  const ctx=cvs.getContext('2d');
-  if (customAnatImg) {
-    ctx.fillStyle='#1a1a1a'; ctx.fillRect(0,0,W,H);
-    ctx.drawImage(customAnatImg,0,0,W,H);
-  } else {
-    const v=anatVariants.find(a=>a.id===currentAnatId);
-    ((v&&v.drawFn)||drawAnatomyDetailed)(ctx,W,H,false);
-  }
-  drawToolBand(ctx,W,H);
-  drawElecLabels(ctx,W,H);
-  drawTrail(ctx,W,H);
-  if (pointerDown) drawToolCursor(ctx,W,H);
-}
-
-// Interpolate position along gesture path at time t (ms into loop)
-function _pathAt(t) {
-  const path = _gesturePath;
-  if (!path.length) return null;
-  if (t <= path[0].t) return path[0];
-  if (t >= path[path.length-1].t) return path[path.length-1];
-  for (let i = 0; i < path.length-1; i++) {
-    if (t >= path[i].t && t <= path[i+1].t) {
-      const f = (t - path[i].t) / (path[i+1].t - path[i].t);
-      return { x: path[i].x + f*(path[i+1].x - path[i].x),
-               y: path[i].y + f*(path[i+1].y - path[i].y) };
-    }
-  }
-  return path[path.length-1];
-}
-
-(function trailTick() {
-  const now = Date.now();
-  if (looping && _gesturePath.length > 1 && _loopDur > 0) {
-    // Advance dot position along recorded path, looping continuously
-    const elapsed = (performance.now() - _loopStart) % _loopDur;
-    const pos = _pathAt(elapsed);
-    if (pos) {
-      lastX = pos.x; lastY = pos.y;
-      _trail.push({x:pos.x, y:pos.y, t:now});
-      if (_trail.length > 80) _trail.shift();
-    }
-    draw();
-  } else if (_trail.length) {
-    _trail = _trail.filter(p => now - p.t < 1800);
-    draw();
-  }
-  requestAnimationFrame(trailTick);
-})();
-
-const ro=new ResizeObserver(()=>draw());
-ro.observe(document.getElementById('anatomy-wrap'));
-
-// Keep syncing canvas size for 3s after load to handle async reflows
-// (riders panel, anatomy picker) that shift layout after first draw
-const _drawUntil=Date.now()+3000;
-(function syncDraw(){
-  const w=document.getElementById('anatomy-wrap');
-  if(w&&w.offsetHeight>10){
-    if(cvs.width!==w.offsetWidth||cvs.height!==w.offsetHeight){draw();}
-  }
-  if(Date.now()<_drawUntil){requestAnimationFrame(syncDraw);}
-})();
-
-setInterval(async()=>{
-  try {
-    const d=await(await fetch('/state')).json(); setConn(true);
-    if (d.intensity != null) serverIntensity = d.intensity;
-    if (!pointerDown) setLooping(d.gesture_active);
-    if (d.gesture_active&&!pointerDown&&!looping) setStatus('Looping '+d.gesture_dur.toFixed(1)+'s  drag to replace');
-    // Bottle overlay
-    if (d.bottle_active) {
-      showBottleOverlay(d.bottle_mode || 'normal', d.bottle_remaining || 0);
-    } else {
-      if (_bottleOverlayActive) hideBottleOverlay();
-    }
-  } catch(_) { setConn(false); }
-},1500);
-
-loadAnatomyList(); loadToolImages(); autoUploadStoredAnatomy();
-
-// ── Like button ─────────────────────────────────────────────────────────────
-function sendLike(emoji) {
-  if (_riderWs && _riderWs.readyState === WebSocket.OPEN) {
-    _riderWs.send(JSON.stringify({type: 'like', emoji}));
-  }
-}
-
-// ── Bottle overlay ──────────────────────────────────────────────────────────
+// ── State poll (intensity + bottle) ─────────────────────────────────────────
 let _bottleOverlayActive = false;
 let _bottleOverlayMode   = 'normal';
 let _bottleOverlayIv     = null;
 let _bottlePhaseTimer    = null;
 
+setInterval(async () => {
+  try {
+    const d = await (await fetch(_BASE + '/state')).json();
+    setConn(true);
+    updatePower(d.intensity ?? 0);
+    if (d.bottle_active) showBottleOverlay(d.bottle_mode || 'normal', d.bottle_remaining || 0);
+    else if (_bottleOverlayActive) hideBottleOverlay();
+  } catch(_) { setConn(false); }
+}, 1200);
+
+// ── Bottle overlay ───────────────────────────────────────────────────────────
 function showDeepHuffDots(containerEl) {
   containerEl.innerHTML = '';
   const dots = [];
@@ -2721,8 +1939,7 @@ function showDeepHuffDots(containerEl) {
     const d = document.createElement('span');
     d.textContent = '\u25cf';
     d.style.cssText = 'font-size:20px;margin:0 4px;transition:opacity 0.5s;color:#ffcc14';
-    containerEl.appendChild(d);
-    dots.push(d);
+    containerEl.appendChild(d); dots.push(d);
   }
   let idx = 0;
   const iv = setInterval(() => {
@@ -2731,75 +1948,45 @@ function showDeepHuffDots(containerEl) {
   }, 2000);
   return iv;
 }
-
 function _clearBottleTimers() {
-  if (_bottleOverlayIv)    { clearInterval(_bottleOverlayIv);  _bottleOverlayIv = null; }
-  if (_bottlePhaseTimer)   { clearTimeout(_bottlePhaseTimer);  _bottlePhaseTimer = null; }
+  if (_bottleOverlayIv)  { clearInterval(_bottleOverlayIv);  _bottleOverlayIv  = null; }
+  if (_bottlePhaseTimer) { clearTimeout(_bottlePhaseTimer);  _bottlePhaseTimer = null; }
 }
-
 function showBottleOverlay(mode, remaining) {
   const ov      = document.getElementById('bottle-overlay');
   const heading = document.getElementById('bottle-overlay-heading');
   const sub     = document.getElementById('bottle-overlay-sub');
   const dots    = document.getElementById('bottle-overlay-dots');
   const cd      = document.getElementById('bottle-overlay-cd');
-
   if (!ov) return;
-
-  // Already showing this mode — just update countdown
-  if (_bottleOverlayActive && _bottleOverlayMode === mode) {
-    cd.textContent = Math.ceil(remaining) + 's';
-    return;
-  }
-
-  // Fresh show — reset
+  if (_bottleOverlayActive && _bottleOverlayMode === mode) { cd.textContent = Math.ceil(remaining) + 's'; return; }
   _clearBottleTimers();
-  _bottleOverlayActive = true;
-  _bottleOverlayMode   = mode;
-  dots.innerHTML       = '';
-  ov.style.display     = 'flex';
-
+  _bottleOverlayActive = true; _bottleOverlayMode = mode;
+  dots.innerHTML = ''; ov.style.display = 'flex';
   if (mode === 'normal') {
-    heading.textContent = 'Take a huff!';
-    sub.textContent     = '';
-    cd.textContent      = Math.ceil(remaining) + 's';
+    heading.textContent = 'Take a huff!'; sub.textContent = ''; cd.textContent = Math.ceil(remaining) + 's';
   } else if (mode === 'deep_huff') {
-    heading.textContent = 'DEEP HUFF';
-    sub.textContent     = 'HOLD IT\u2026';
-    cd.textContent      = '';
+    heading.textContent = 'DEEP HUFF'; sub.textContent = 'HOLD IT\u2026'; cd.textContent = '';
     _bottleOverlayIv = showDeepHuffDots(dots);
   } else if (mode === 'double_hit') {
-    // Phase 1: HIT #1 (0-10s) — show overlay
-    heading.textContent = 'HIT #1 \ud83e\uddf4';
-    sub.textContent     = '';
-    cd.textContent      = '';
-    // Phase 2 at 10s: hide overlay (get ready)
+    heading.textContent = 'HIT #1 \ud83e\uddf4'; sub.textContent = ''; cd.textContent = '';
     _bottlePhaseTimer = setTimeout(() => {
-      ov.style.display    = 'none';
-      heading.textContent = '';
-      sub.textContent     = '';
-      // Phase 3 at 25s (15s later): show HIT #2
+      ov.style.display = 'none';
       _bottlePhaseTimer = setTimeout(() => {
-        ov.style.display    = 'flex';
-        heading.textContent = 'HIT #2 \ud83e\uddf4';
-        sub.textContent     = '';
-        cd.textContent      = '';
+        ov.style.display = 'flex';
+        heading.textContent = 'HIT #2 \ud83e\uddf4'; sub.textContent = ''; cd.textContent = '';
       }, 15000);
     }, 10000);
   }
 }
-
 function hideBottleOverlay() {
-  _bottleOverlayActive = false;
-  _clearBottleTimers();
+  _bottleOverlayActive = false; _clearBottleTimers();
   const ov = document.getElementById('bottle-overlay');
   if (ov) ov.style.display = 'none';
 }
 
-
-// ── Rider name input ───────────────────────────────────────────────────────
-let _riderWs = null;
-let _riderNameTimer = null;
+// ── Rider name ────────────────────────────────────────────────────────────────
+let _riderWs = null, _riderNameTimer = null;
 (function initRiderName() {
   const inp = document.getElementById('rider-name-input');
   if (!inp) return;
@@ -2810,32 +1997,40 @@ let _riderNameTimer = null;
     localStorage.setItem('reDriveRiderName', val);
     clearTimeout(_riderNameTimer);
     _riderNameTimer = setTimeout(() => {
-      if (_riderWs && _riderWs.readyState === WebSocket.OPEN) {
-        _riderWs.send(JSON.stringify({type: 'set_name', name: val.trim()}));
-      }
+      if (_riderWs && _riderWs.readyState === WebSocket.OPEN)
+        _riderWs.send(JSON.stringify({type:'set_name', name:val.trim()}));
     }, 600);
   });
 })();
 
+// ── Riders panel ──────────────────────────────────────────────────────────────
 function renderRidersPanel(data) {
   const panel = document.getElementById('riders-panel');
   if (!panel) return;
   const parts = (data.participants || []);
   if (!parts.length) { panel.style.display = 'none'; return; }
   panel.style.display = 'flex';
-  panel.innerHTML = parts.map((p, i) => {
-    const url = p.anatomy ? '/touch_assets/anatomy/' + p.anatomy.split('/').map(encodeURIComponent).join('/') : '';
-    const bg = url ? 'background-image:url(\'' + url + '\');background-size:cover;background-position:top center' : 'background:#222';
-    return '<div style="width:28px;height:70px;border-radius:6px;border:1px solid #2a2a2a;' +
-      bg + ';position:relative;flex-shrink:0;margin-left:' + (i === 0 ? '0' : '-6px') + ';z-index:' + i + '">' +
-      '<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.65);' +
-      'font-size:7px;color:#ccc;text-align:center;padding:1px;border-radius:0 0 5px 5px;' +
-      'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + p.name + '</div>' +
-      '</div>';
+  panel.innerHTML = parts.map(p => {
+    const url = p.anatomy
+      ? '/touch_assets/anatomy/' + p.anatomy.split('/').map(encodeURIComponent).join('/')
+      : '';
+    const bg = url
+      ? `background-image:url('${url}');background-size:cover;background-position:top center`
+      : 'background:#222';
+    return `<div class="rider-card">
+      <div class="rider-avatar" style="${bg}"></div>
+      <div class="rider-name">${(p.name||'Rider').replace(/</g,'&lt;')}</div>
+    </div>`;
   }).join('');
 }
 
-// ── Room WebSocket (anatomy_added + driver_joined + participants_update) ───
+// ── Emotes ────────────────────────────────────────────────────────────────────
+function sendLike(emoji) {
+  if (_riderWs && _riderWs.readyState === WebSocket.OPEN)
+    _riderWs.send(JSON.stringify({type:'like', emoji}));
+}
+
+// ── Room WebSocket (participants, driver name) ────────────────────────────────
 (function connectRoomWS() {
   if (!_ROOM_CODE) return;
   const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -2845,26 +2040,18 @@ function renderRidersPanel(data) {
       const ws = new WebSocket(wsUrl);
       _riderWs = ws;
       ws.onopen = () => {
-        // Send saved name immediately on connect
-        const savedName = localStorage.getItem('reDriveRiderName') || '';
-        if (savedName) ws.send(JSON.stringify({type: 'set_name', name: savedName}));
+        const name = localStorage.getItem('reDriveRiderName') || '';
+        if (name) ws.send(JSON.stringify({type:'set_name', name}));
       };
-      ws.onmessage = (ev) => {
+      ws.onmessage = ev => {
         try {
           const msg = JSON.parse(ev.data);
-          if (msg.type === 'anatomy_added' && msg.name) {
-            _addCustomAnatomy(msg.name);
-          } else if (msg.type === 'participants_update') {
-            // Driven-by banner
-            const dbDiv = document.getElementById('driven-by');
+          if (msg.type === 'participants_update') {
+            const dbDiv  = document.getElementById('driven-by');
             const dbName = document.getElementById('driven-by-name');
             if (dbDiv && dbName) {
-              if (msg.driver_name) {
-                dbName.textContent = msg.driver_name;
-                dbDiv.style.display = 'block';
-              } else {
-                dbDiv.style.display = 'none';
-              }
+              if (msg.driver_name) { dbName.textContent = msg.driver_name; dbDiv.style.display = 'block'; }
+              else dbDiv.style.display = 'none';
             }
             renderRidersPanel(msg);
           }
@@ -2876,15 +2063,6 @@ function renderRidersPanel(data) {
   }
   connect();
 })();
-</script>
-<script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
-<script>
-  kofiWidgetOverlay.draw('stimstation', {
-    'type': 'floating-chat',
-    'floating-chat.donateButton.text': 'Support Us',
-    'floating-chat.donateButton.background-color': '#d9534f',
-    'floating-chat.donateButton.text-color': '#fff'
-  });
 </script>
 </body>
 </html>
