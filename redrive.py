@@ -1203,10 +1203,14 @@ function toggleMode() {
     _driverMode === 'controls' ? '\uD83D\uDD90 Touch' : '\uD83C\uDFDB Controls';
   if (_driverMode === 'touch') {
     initTouchPanel();
-    // Retry until tc-main has laid out
-    (function tryTcDraw(){
+    const _tcUntil=Date.now()+3000;
+    (function syncTcDraw(){
       const w=document.getElementById('tc-main');
-      if(w&&w.offsetHeight>10){tcDraw();}else{requestAnimationFrame(tryTcDraw);}
+      const c=document.getElementById('touch-canvas');
+      if(w&&w.offsetHeight>10){
+        if(!c||c.width!==w.offsetWidth||c.height!==w.offsetHeight){tcDraw();}
+      }
+      if(Date.now()<_tcUntil){requestAnimationFrame(syncTcDraw);}
     })();
   }
 }
@@ -2498,10 +2502,15 @@ function _pathAt(t) {
 const ro=new ResizeObserver(()=>draw());
 ro.observe(document.getElementById('anatomy-wrap'));
 
-// Retry initial draw until the element has a real height
-(function tryDraw(){
+// Keep syncing canvas size for 3s after load to handle async reflows
+// (riders panel, anatomy picker) that shift layout after first draw
+const _drawUntil=Date.now()+3000;
+(function syncDraw(){
   const w=document.getElementById('anatomy-wrap');
-  if(w&&w.offsetHeight>10){draw();}else{requestAnimationFrame(tryDraw);}
+  if(w&&w.offsetHeight>10){
+    if(cvs.width!==w.offsetWidth||cvs.height!==w.offsetHeight){draw();}
+  }
+  if(Date.now()<_drawUntil){requestAnimationFrame(syncDraw);}
 })();
 
 setInterval(async()=>{
