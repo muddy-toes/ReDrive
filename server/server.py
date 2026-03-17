@@ -276,22 +276,33 @@ _LANDING_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ReDrive</title>
+<title>ReDrive &middot; EstimStation</title>
 <style>
-  :root { --bg:#111; --bg2:#1a1a1a; --bg3:#222; --border:#2a2a2a;
-          --fg:#fff; --fg2:#999; --accent:#5fa3ff; }
+  :root { --bg:#0e0e10; --bg2:#18181c; --bg3:#222228; --border:#2a2a32;
+          --fg:#f0f0f5; --fg2:#8888a0; --accent:#5fa3ff; --accent2:#a855f7;
+          --ok:#4caf50; --warn:#ff9800; }
   * { box-sizing:border-box; margin:0; padding:0 }
   body { background:var(--bg); color:var(--fg); font:15px/1.5 system-ui,sans-serif;
          display:flex; flex-direction:column; align-items:center;
-         justify-content:center; min-height:100vh; padding:2rem }
-  h1 { font-size:2.2rem; letter-spacing:.05em; color:var(--accent); margin-bottom:.25rem }
+         min-height:100vh; padding:2rem }
+  .site-header { width:100%; max-width:420px; display:flex; align-items:center;
+                 justify-content:space-between; margin-bottom:2rem; padding-bottom:1rem;
+                 border-bottom:1px solid var(--border) }
+  .site-header a { text-decoration:none }
+  .brand { font-size:1.1rem; font-weight:700; color:var(--fg); letter-spacing:.04em }
+  .brand span { color:var(--accent) }
+  h1 { font-size:2.2rem; letter-spacing:.05em;
+       background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%);
+       -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+       background-clip:text; margin-bottom:.25rem }
   p.sub { color:var(--fg2); margin-bottom:2.5rem; font-size:.95rem }
   .card { background:var(--bg2); border:1px solid var(--border); border-radius:10px;
           padding:2rem 2.5rem; width:100%; max-width:420px; margin-bottom:1.5rem }
   .card h2 { font-size:1.1rem; color:var(--fg2); text-transform:uppercase;
               letter-spacing:.08em; margin-bottom:1.2rem; font-weight:500 }
-  button { width:100%; padding:.85rem; background:var(--accent); color:#000;
-           border:none; border-radius:6px; font-size:1rem; font-weight:700;
+  button { width:100%; padding:.85rem;
+           background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%);
+           color:#fff; border:none; border-radius:6px; font-size:1rem; font-weight:700;
            cursor:pointer; transition:opacity .15s }
   button:hover { opacity:.85 }
   input { width:100%; padding:.75rem 1rem; background:var(--bg3);
@@ -301,10 +312,10 @@ _LANDING_HTML = """<!DOCTYPE html>
   input::placeholder { letter-spacing:normal; text-transform:none; color:var(--fg2) }
   .note { color:var(--fg2); font-size:.83rem; margin-top:1rem; line-height:1.6 }
   code { background:var(--bg3); padding:.1em .4em; border-radius:3px;
-         font-family:monospace; font-size:.9em }
+         font-family:monospace; font-size:.9em; color:var(--accent) }
   .faq { width:100%; max-width:420px; margin-bottom:2rem }
-  .faq h2 { font-size:.8rem; color:var(--fg2); text-transform:uppercase;
-             letter-spacing:.1em; margin-bottom:1rem; font-weight:500 }
+  .faq-section-label { font-size:.75rem; color:var(--accent); text-transform:uppercase;
+                       letter-spacing:.12em; margin:1.4rem 0 .5rem; font-weight:700 }
   details { border-bottom:1px solid var(--border); padding:.6rem 0 }
   details:first-of-type { border-top:1px solid var(--border) }
   summary { cursor:pointer; font-size:.95rem; color:var(--fg); list-style:none;
@@ -312,7 +323,7 @@ _LANDING_HTML = """<!DOCTYPE html>
             user-select:none; padding:.2rem 0 }
   summary::-webkit-details-marker { display:none }
   summary::after { content:'+'; color:var(--fg2); font-size:1.1rem; flex-shrink:0; margin-left:1rem }
-  details[open] summary::after { content:'−' }
+  details[open] summary::after { content:'\u2212' }
   details p { color:var(--fg2); font-size:.9rem; line-height:1.7;
               padding:.6rem 0 .2rem; margin:0 }
   details p a { color:var(--accent); text-decoration:none }
@@ -320,42 +331,54 @@ _LANDING_HTML = """<!DOCTYPE html>
           padding:.9rem 1.1rem; margin-bottom:1.5rem; width:100%; max-width:420px;
           color:#ffcc55; font-size:.88rem; line-height:1.6 }
   .warn strong { display:block; margin-bottom:.3rem; font-size:.95rem }
+  .site-footer { width:100%; max-width:420px; text-align:center; margin-top:2rem;
+                 padding-top:1.2rem; border-top:1px solid var(--border);
+                 color:var(--fg2); font-size:.8rem; line-height:1.9 }
+  .site-footer a { color:var(--accent); text-decoration:none }
+  .site-footer a:hover { text-decoration:underline }
 </style>
 </head>
 <body>
+
+<header class="site-header">
+  <a href="https://www.estimstation.com/" class="brand">
+    <span>Estim</span>Station
+  </a>
+  <span style="color:var(--fg2);font-size:.82rem">ReDrive &middot; Remote Estim</span>
+</header>
+
 <h1>ReDrive</h1>
-<p class="sub">Remote pattern engine for ReStim</p>
+<p class="sub">Remote pattern engine for ReStim &mdash; by EstimStation</p>
 
 <div class="warn">
-  <strong>⚠ Early alpha software</strong>
+  <strong>&#9888; Early alpha software</strong>
   This is experimental. Expect rough edges, disconnections, and missing features.
-  Always keep your hand on your ReStim device's power dial — the driver controls
+  Always keep your hand on your ReStim device's power dial &mdash; the driver controls
   pattern shape, but <em>you</em> control your maximum intensity.
 </div>
 
 <div class="faq">
-  <h2>What is this?</h2>
+
+  <div class="faq-section-label">For Riders</div>
 
   <details>
-    <summary>What does ReDrive do?</summary>
-    <p>ReDrive lets one person (the <strong>driver</strong>) control the estim patterns
-    of one or more people (the <strong>riders</strong>) in real time over the internet.
-    The driver uses a touch canvas on their phone or browser. Riders run a small app
-    on their PC that bridges the signal to their local ReStim device.</p>
+    <summary>What do I need to use ReDrive as a rider?</summary>
+    <p>A PC running ReStim with its WebSocket server enabled, and Python 3.9+.
+    Download the ReDrive Rider app or run <code>rider_client.py</code> directly.</p>
   </details>
 
   <details>
-    <summary>What hardware do I need?</summary>
-    <p>You need a <strong>ReStim-compatible device</strong> (ET312, MK312, or similar)
-    with ReStim software running on a Windows or Mac PC. The driver only needs a browser
-    — phone, tablet, or desktop all work.</p>
+    <summary>How do I set up ReStim to work with ReDrive?</summary>
+    <p>In ReStim, enable the WebSocket server (default port 12346). ReDrive connects
+    to <code>ws://localhost:12346</code>. See the
+    <a href="https://github.com/siotour/restim" target="_blank" rel="noopener">ReStim GitHub</a>
+    for setup instructions.</p>
   </details>
 
   <details>
-    <summary>Is my session private?</summary>
-    <p>Rooms are identified by a 10-character code that you share yourself. Nobody else
-    can access your room without the code. Rooms expire after 24 hours. No session data
-    is logged or stored.</p>
+    <summary>My driver sent me a room code &mdash; what do I do?</summary>
+    <p>Run <code>python rider_client.py ROOMCODE</code> or use the ReDrive Rider app,
+    enter the code, and click Connect. Make sure ReStim is already running first.</p>
   </details>
 
   <details>
@@ -366,38 +389,60 @@ _LANDING_HTML = """<!DOCTYPE html>
     Make sure ReStim is already running before you connect.</p>
   </details>
 
+  <div class="faq-section-label">For Drivers</div>
+
   <details>
-    <summary>How do I set up ReStim?</summary>
-    <p>ReDrive works with <a href="https://github.com/ranzbak/restim" target="_blank">ReStim</a>
-    — free open-source estim software. Install it on the PC connected to your device,
-    then enable its WebSocket server: in ReStim go to <strong>Settings → Network</strong>
-    and enable <strong>WebSocket server</strong> (default port 12346).
-    Leave ReStim running before connecting ReDrive Rider.</p>
+    <summary>What device do I need to drive?</summary>
+    <p>Any phone, tablet, or computer with a modern browser. No app needed &mdash;
+    just open your room URL and you're in control.</p>
+  </details>
+
+  <details>
+    <summary>Can I control multiple riders at once?</summary>
+    <p>Yes &mdash; share your room code with as many riders as you like.
+    All connected riders receive the same signal simultaneously.</p>
+  </details>
+
+  <details>
+    <summary>How long does a room last?</summary>
+    <p>Rooms expire after 24 hours of inactivity. Active rooms with a connected
+    driver are kept alive automatically.</p>
   </details>
 
   <details>
     <summary>How do I get started as a driver?</summary>
-    <p>Click <strong>Create New Room</strong> below. You'll get a room code — share it
-    with your rider(s). Open the touch canvas on your phone and you're in control.
-    Riders need to be connected before patterns reach them.</p>
+    <p>Click <strong>Create New Room</strong> below. You'll get a room code &mdash;
+    share it with your rider(s). Open the touch canvas on your phone and you're in
+    control. Riders need to be connected before patterns reach them.</p>
+  </details>
+
+  <div class="faq-section-label">General</div>
+
+  <details>
+    <summary>What does ReDrive do?</summary>
+    <p>ReDrive lets one person (the <strong>driver</strong>) control the estim patterns
+    of one or more people (the <strong>riders</strong>) in real time over the internet.
+    The driver uses a touch canvas on their phone or browser. Riders run a small app
+    on their PC that bridges the signal to their local ReStim device.</p>
   </details>
 
   <details>
-    <summary>Can one driver control multiple riders?</summary>
-    <p>Yes. Share the same room code with as many riders as you like. All connected
-    riders receive the same pattern simultaneously.</p>
+    <summary>Is my session private?</summary>
+    <p>Rooms are identified by a 10-character code that you share yourself. Nobody else
+    can access your room without the code. Rooms expire after 24 hours. No session data
+    is logged or stored.</p>
   </details>
 
   <details>
     <summary>What if something goes wrong?</summary>
-    <p>The rider can disconnect or close ReDrive Rider at any time — it immediately
+    <p>The rider can disconnect or close ReDrive Rider at any time &mdash; it immediately
     stops forwarding signals. Your ReStim device's own power controls always take
     priority. If in doubt, turn the dial down.</p>
   </details>
 </div>
 
 <div class="card">
-  <h2>Driver — create a room</h2>
+  <h2>Driver &mdash; create a room</h2>
   <form action="/create" method="post">
     <button type="submit">Create New Room</button>
   </form>
@@ -405,16 +450,22 @@ _LANDING_HTML = """<!DOCTYPE html>
 </div>
 
 <div class="card">
-  <h2>Rider — join a room</h2>
+  <h2>Rider &mdash; join a room</h2>
   <input id="code-in" placeholder="Enter room code" maxlength="10"
          oninput="this.value=this.value.toUpperCase().replace(/[^BCDFGHJKMNPQRSTVWXYZ23456789]/g,'')">
   <button onclick="joinRider()">Connect as Rider</button>
   <p class="note">
     Download <a href="/download/windows" style="color:var(--accent)">ReDrive Rider for Windows</a>
-    or <a href="/download/mac" style="color:var(--accent)">macOS</a> — or run
+    or <a href="/download/mac" style="color:var(--accent)">macOS</a> &mdash; or run
     <code>python rider_client.py &lt;ROOMCODE&gt;</code> directly if you have Python.
   </p>
 </div>
+
+<footer class="site-footer">
+  &copy; EstimStation &middot;
+  <a href="https://www.estimstation.com">estimstation.com</a> &middot;
+  ReDrive is open source
+</footer>
 
 <script>
 function joinRider(){
