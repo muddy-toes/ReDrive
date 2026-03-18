@@ -460,8 +460,8 @@ DRIVER_HTML = r"""<!DOCTYPE html>
 
   /* ── Touch panel ── */
   #touch-panel { display:none; flex:1; flex-direction:column; gap:5px; min-height:0; overflow:hidden; }
-  #tc-body { display:flex; gap:5px; flex:1; min-height:0; }
-  #tc-main { flex:1; min-height:0; min-width:0; position:relative; border-radius:6px; background:#1a1a1a; }
+  #tc-body { display:flex; gap:8px; flex:1; min-height:0; align-items:flex-start; }
+  #tc-main { flex:0 0 auto; width:min(100%,340px); aspect-ratio:9/16; min-height:0; position:relative; border-radius:6px; background:#1a1a1a; align-self:flex-start; }
   #tc-main canvas { display:block; width:100%; height:100%; border-radius:6px; cursor:none; touch-action:none; }
   @keyframes tc-loop-pulse {
     0%,100% { box-shadow: 0 0 0 0 rgba(95,163,255,0.5); }
@@ -1544,19 +1544,20 @@ function tcDraw() {
   if (tcPointerDown || _tcLooping) {
     const power=tcIntFromX(tcLastX);
     const curX=tcLastX*W, curY=tcLastY*H;
-    // Size: scales from ~10% to ~28% of canvas width with power
-    const dotR=W*(0.10+power*0.18);
+    const S=Math.min(W,H);
+    // Size: scales from ~6% to ~16% of shortest canvas dimension
+    const dotR=S*(0.06+power*0.10);
     // Glow softness: large soft at low power, tight hard at high power
-    const glowR=dotR*(3.0-power*1.8);
+    const glowR=dotR*(2.8-power*1.5);
     const glow=ctx.createRadialGradient(curX,curY,0,curX,curY,glowR);
     glow.addColorStop(0,_tcPowerColor(power,0.35));
     glow.addColorStop(0.55,_tcPowerColor(power,0.12));
     glow.addColorStop(1,_tcPowerColor(power,0));
     ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(curX,curY,glowR,0,Math.PI*2); ctx.fill();
     if (_tcCursorMode==='grid') {
-      // Crosshair: full-width H line + full-height V line, width scales with power like dotR
+      // Crosshair: full-width H line + full-height V line, thin stroke that thickens with power
       ctx.strokeStyle=_tcPowerColor(power,0.55+power*0.40);
-      ctx.lineWidth=dotR; ctx.lineCap='butt';
+      ctx.lineWidth=1.5+power*4; ctx.lineCap='butt';
       ctx.beginPath(); ctx.moveTo(0,curY); ctx.lineTo(W,curY); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(curX,0); ctx.lineTo(curX,H); ctx.stroke();
     } else {
