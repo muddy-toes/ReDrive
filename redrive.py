@@ -1973,9 +1973,9 @@ function _applyImage() {
 
 // ── Driver WebSocket — receive participants_update ────────────────────────────
 (function connectDriverWS() {
-  if (typeof DRIVER_KEY === 'undefined' || typeof ROOM_CODE === 'undefined') return;
+  if (typeof DRIVER_KEY === 'undefined' || !_ROOM_CODE) return;
   const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = wsProto + '//' + location.host + '/room/' + ROOM_CODE + '/driver-ws?key=' + encodeURIComponent(DRIVER_KEY);
+  const wsUrl = wsProto + '//' + location.host + '/room/' + _ROOM_CODE + '/driver-ws?key=' + encodeURIComponent(DRIVER_KEY);
   let _driverWs = null;
   function connect() {
     try {
