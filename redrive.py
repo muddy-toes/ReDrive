@@ -577,7 +577,7 @@ DRIVER_HTML = r"""<!DOCTYPE html>
     </div>
 
     <!-- Controls tab -->
-    <div id="controls-panel">
+    <div id="controls-panel" style="display:flex">
       <div class="section-label" style="margin-top:4px">Live</div>
       <div id="viz-row">
         <canvas id="waveform" height="72"></canvas>
@@ -1336,7 +1336,7 @@ function triggerLikeAnimation(like) {
 let _driverMode = 'controls';
 function setTab(tab) {
   _driverMode = tab;
-  document.getElementById('controls-panel').style.display = tab === 'controls' ? '' : 'none';
+  document.getElementById('controls-panel').style.display = tab === 'controls' ? 'flex' : 'none';
   const tp = document.getElementById('touch-panel');
   tp.style.display = tab === 'touch' ? 'flex' : 'none';
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
