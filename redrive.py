@@ -281,6 +281,9 @@ DRIVER_HTML = r"""<!DOCTYPE html>
     display:flex; flex-direction:column; box-sizing:border-box; gap:6px;
     max-width:520px; margin:0 auto;
   }
+  @media(min-width:640px)  { body { max-width:700px; } }
+  @media(min-width:900px)  { body { max-width:880px; } }
+  @media(min-width:1100px) { body { max-width:1020px; } }
 
   /* ── Page header ── */
   #page-hdr { flex-shrink:0; display:flex; flex-direction:column; gap:5px; }
@@ -1984,7 +1987,7 @@ TOUCH_HTML = r"""<!DOCTYPE html>
     --border:#2a2a2a; --fg:#fff; --fg2:#999;
     --accent:#5fa3ff; --ok:#4caf50; --err:#f44336; --warn:#ff9800;
   }
-  html, body { height: 100%; }
+  html { min-height: 100%; }
   body {
     background: var(--bg); color: var(--fg);
     font-family: Arial, sans-serif; font-size: 14px;
@@ -1992,6 +1995,7 @@ TOUCH_HTML = r"""<!DOCTYPE html>
     padding: 10px; padding-top: calc(10px + env(safe-area-inset-top));
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
     max-width: 480px; margin: 0 auto; gap: 10px;
+    min-height: 100dvh; overflow-y: auto;
     user-select: none; -webkit-user-select: none;
   }
   /* Header */
@@ -2056,10 +2060,6 @@ TOUCH_HTML = r"""<!DOCTYPE html>
     border-radius:4px; color:var(--accent); font-size:11px;
     font-family:monospace; letter-spacing:.1em; cursor:pointer;
   }
-  #leave-btn {
-    padding:4px 10px; background:none; border:1px solid var(--border);
-    border-radius:4px; color:var(--fg2); font-size:11px; cursor:pointer;
-  }
   /* Bottle overlay */
   #bottle-overlay {
     display:none; position:fixed; inset:0; background:rgba(0,0,0,0.93); z-index:9999;
@@ -2105,7 +2105,6 @@ TOUCH_HTML = r"""<!DOCTYPE html>
     <input type="file" id="anat-file-input" accept="image/png,image/jpeg,image/webp"
            style="display:none" onchange="onAnatFileSelected(this)">
   </label>
-  <button id="leave-btn" onclick="window.location='/'">Leave &#8599;</button>
 </div>
 
 <div id="bottle-overlay">
