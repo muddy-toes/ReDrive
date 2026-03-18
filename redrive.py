@@ -279,24 +279,24 @@ DRIVER_HTML = r"""<!DOCTYPE html>
     --radius:16px;
   }
   body {
-    background:var(--bg);
     color:var(--fg);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
     font-size:14px;
-    padding:10px;
+    padding:8px;
     height:100dvh; overflow:hidden;
-    display:flex; flex-direction:column; box-sizing:border-box; gap:10px;
+    display:flex; flex-direction:column; box-sizing:border-box; gap:7px;
     max-width:1280px; margin:0 auto;
-    background:radial-gradient(circle at 50% 10%,rgba(95,163,255,0.06) 0%,transparent 70%);
+    background:linear-gradient(160deg,#0a0a0a 0%,#1a2333 100%);
+    background-attachment:fixed;
   }
 
   /* ── Page header ── */
   #page-hdr {
     background:var(--glass); backdrop-filter:blur(20px);
     border:1px solid var(--border); border-radius:var(--radius);
-    padding:14px 18px; flex-shrink:0;
+    padding:10px 14px; flex-shrink:0;
     box-shadow:0 8px 32px rgba(0,0,0,0.45);
-    display:flex; flex-direction:column; gap:10px;
+    display:flex; flex-direction:column; gap:7px;
   }
   #hdr-row1 { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
   #hdr-row1 h1 {
@@ -334,10 +334,11 @@ DRIVER_HTML = r"""<!DOCTYPE html>
 
   /* ── Rider column ── */
   #rider-col {
-    width:80px; flex-shrink:0;
-    display:flex; flex-direction:column; gap:8px;
+    width:74px; flex-shrink:0;
+    display:flex; flex-direction:column; gap:6px;
+    overflow:hidden;
   }
-  #rider-cards { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; }
+  #rider-cards { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:6px; }
   #overlay-btn, #cursor-btn {
     width:100%; padding:7px 4px; background:var(--bg3);
     border:1px solid var(--border); border-radius:10px;
@@ -368,29 +369,29 @@ DRIVER_HTML = r"""<!DOCTYPE html>
   /* ── Tab area ── */
   #tab-area { flex:1; min-width:0; display:flex; flex-direction:column; gap:8px; overflow:hidden; }
   #tab-btns {
-    display:flex; background:var(--glass); border-radius:12px;
-    padding:5px; border:1px solid var(--border); gap:5px; flex-shrink:0;
+    display:flex; background:var(--glass); border-radius:10px;
+    padding:3px; border:1px solid var(--border); gap:3px; flex-shrink:0;
   }
   .tab-btn {
-    flex:1; padding:11px; border-radius:9px;
-    font-weight:600; font-size:14px;
+    flex:1; padding:8px; border-radius:7px;
+    font-weight:600; font-size:13px;
     background:transparent; border:1px solid transparent; color:var(--fg2); cursor:pointer;
   }
   .tab-btn.active {
     background:rgba(95,163,255,0.18); border-color:var(--accent);
-    color:var(--accent); box-shadow:0 4px 14px var(--accent-glow);
+    color:var(--accent); box-shadow:0 2px 10px var(--accent-glow);
   }
 
   /* ── Controls panel ── */
   #controls-panel {
     background:var(--glass); backdrop-filter:blur(20px);
-    border:1px solid var(--border); border-radius:18px;
-    padding:20px 18px; flex:1; overflow-y:auto;
-    display:none; flex-direction:column; gap:20px;
+    border:1px solid var(--border); border-radius:14px;
+    padding:12px 12px; flex:1; overflow-y:hidden;
+    display:none; flex-direction:column; gap:12px;
   }
   .section-label {
-    font-size:11px; font-weight:700; letter-spacing:0.8px;
-    color:var(--accent); text-transform:uppercase; margin-bottom:6px;
+    font-size:10px; font-weight:700; letter-spacing:0.8px;
+    color:var(--accent); text-transform:uppercase; margin-bottom:3px;
   }
   /* Preset row */
   #preset-row { display:flex; gap:6px; flex-wrap:wrap; }
@@ -401,34 +402,34 @@ DRIVER_HTML = r"""<!DOCTYPE html>
   }
   .preset-btn:hover, .preset-btn:active { background:#252525; color:var(--fg); }
   /* Pattern grid */
-  #pattern-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(80px,1fr)); gap:8px; }
+  #pattern-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(68px,1fr)); gap:5px; }
   .pat-btn {
-    padding:14px 8px; background:var(--bg3); border:1px solid var(--border);
-    border-radius:12px; font-size:13px; font-weight:500;
+    padding:9px 6px; background:var(--bg3); border:1px solid var(--border);
+    border-radius:9px; font-size:12px; font-weight:500;
     color:var(--fg2); cursor:pointer; transition:all .15s; text-align:center;
   }
   .pat-btn:active { transform:scale(0.96); }
   .pat-btn.active { background:var(--accent); color:#000; font-weight:700; box-shadow:0 0 18px var(--accent-glow); border-color:var(--accent); }
   /* Sliders */
-  .slider-row { display:flex; flex-direction:column; gap:6px; }
+  .slider-row { display:flex; flex-direction:column; gap:4px; }
   .slider-header { display:flex; justify-content:space-between; align-items:center; }
-  .slider-label { font-size:13px; color:var(--fg2); }
-  .slider-val { font-size:13px; color:var(--fg); font-weight:600; }
+  .slider-label { font-size:12px; color:var(--fg2); }
+  .slider-val { font-size:12px; color:var(--fg); font-weight:600; }
   input[type=range] {
     -webkit-appearance:none; appearance:none; width:100%;
-    height:8px; background:rgba(255,255,255,0.1); border-radius:9999px; outline:none;
+    height:6px; background:rgba(255,255,255,0.1); border-radius:9999px; outline:none;
   }
   input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance:none; width:26px; height:26px;
+    -webkit-appearance:none; width:20px; height:20px;
     background:var(--accent); border-radius:50%;
-    box-shadow:0 0 14px var(--accent-glow); cursor:pointer;
+    box-shadow:0 0 10px var(--accent-glow); cursor:pointer;
   }
-  #intensity-slider { height:12px; }
-  #intensity-slider::-webkit-slider-thumb { width:34px; height:34px; }
+  #intensity-slider { height:10px; }
+  #intensity-slider::-webkit-slider-thumb { width:26px; height:26px; }
   /* Mode / hold / ramp buttons */
   .mode-btn, .hold-btn, .ramp-btn {
-    padding:10px 14px; background:var(--bg3); border:1px solid var(--border);
-    border-radius:10px; color:var(--fg2); font-size:13px; font-weight:600;
+    padding:7px 10px; background:var(--bg3); border:1px solid var(--border);
+    border-radius:8px; color:var(--fg2); font-size:12px; font-weight:600;
     cursor:pointer; transition:all .15s;
   }
   .mode-btn.active, .hold-btn.active {
@@ -450,9 +451,9 @@ DRIVER_HTML = r"""<!DOCTYPE html>
   }
   #alpha-toggle.active { background:rgba(95,163,255,0.18); border-color:var(--accent); color:var(--accent); }
   /* Viz row */
-  #viz-row { display:flex; gap:10px; align-items:flex-start; }
-  #waveform { flex:1; height:90px; border-radius:12px; background:#0f0f0f; }
-  #tri-canvas { width:110px; height:96px; border-radius:12px; background:#0f0f0f; flex-shrink:0; }
+  #viz-row { display:flex; gap:7px; align-items:flex-start; }
+  #waveform { flex:1; height:72px; border-radius:10px; background:#0f0f0f; }
+  #tri-canvas { width:88px; height:76px; border-radius:10px; background:#0f0f0f; flex-shrink:0; }
   /* Beta position */
   #beta-pos { background:rgba(15,15,25,0.7); padding:12px; border-radius:12px; }
   #beta-track { height:8px; background:#222; border-radius:9999px; position:relative; margin:10px 0; }
@@ -565,8 +566,8 @@ DRIVER_HTML = r"""<!DOCTYPE html>
   <!-- Left: rider column -->
   <div id="rider-col">
     <div id="rider-cards"></div>
-    <button id="overlay-btn" onclick="toggleOverlay(this)" title="Overlay guide: ON">GUIDE<br>ON</button>
-    <button id="cursor-btn" onclick="toggleCursor(this)" title="Cursor: dot">DOT</button>
+    <button id="overlay-btn" onclick="toggleOverlay(this)" title="Overlay guide: ON" style="display:none">GUIDE<br>ON</button>
+    <button id="cursor-btn" onclick="toggleCursor(this)" title="Cursor: dot" style="display:none">DOT</button>
   </div>
 
   <!-- Right: tab area -->
@@ -1339,6 +1340,9 @@ function setTab(tab) {
   document.getElementById('controls-panel').style.display = tab === 'controls' ? 'flex' : 'none';
   const tp = document.getElementById('touch-panel');
   tp.style.display = tab === 'touch' ? 'flex' : 'none';
+  const touchOnly = tab === 'touch' ? '' : 'none';
+  document.getElementById('overlay-btn').style.display = touchOnly;
+  document.getElementById('cursor-btn').style.display = touchOnly;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   if (tab === 'touch') {
     initTouchPanel();
@@ -2041,7 +2045,8 @@ TOUCH_HTML = r"""<!DOCTYPE html>
     max-width:520px; margin:0 auto;
     min-height:100dvh; overflow-y:auto;
     display:flex; flex-direction:column; gap:16px;
-    background:radial-gradient(circle at 50% 10%,rgba(95,163,255,0.06) 0%,transparent 70%);
+    background:linear-gradient(160deg,#0a0a0a 0%,#1a2333 100%);
+    background-attachment:fixed;
     user-select:none; -webkit-user-select:none;
   }
   /* Header */
