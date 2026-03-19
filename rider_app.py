@@ -20,8 +20,9 @@ APP_VERSION  = "0.1.0"
 UPDATE_URL   = "https://redrive.estimstation.com/version.json"
 RELAY_HOST   = "redrive.estimstation.com"
 
-IS_MAC = platform.system() == "Darwin"
-IS_WIN = platform.system() == "Windows"
+IS_MAC   = platform.system() == "Darwin"
+IS_WIN   = platform.system() == "Windows"
+IS_LINUX = platform.system() == "Linux"
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 BG     = "#111111"
@@ -465,7 +466,12 @@ class RiderApp:
             latest = data.get("version", "0.0.0")
             if (tuple(int(x) for x in latest.split(".")) >
                     tuple(int(x) for x in APP_VERSION.split("."))):
-                key = "download_mac" if IS_MAC else "download_windows"
+                if IS_MAC:
+                    key = "download_mac"
+                elif IS_LINUX:
+                    key = "download_linux"
+                else:
+                    key = "download_windows"
                 url = data.get(key) or data.get("download_windows", "")
                 self._show_update_banner(latest, url)
         except Exception:
