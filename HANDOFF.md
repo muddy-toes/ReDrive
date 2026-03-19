@@ -178,7 +178,7 @@ Panels use `backdrop-filter: blur(20px)` glass morphism. Rider cards are portrai
 BUGS: -The driver hasen't yet confirled seeing riders as either custom images or default ones
 - the UI is kinda big and ugly
 - a drivers UI elements  unified across
-
+- oh and write installers for the drivers to download and add their own pics in it so the custom pics stay local because privacy also i don't want people uploading random stuff and clogging my droplet 
 ## Running locally (LAN mode)
 
 ```bash
