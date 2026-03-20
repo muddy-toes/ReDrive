@@ -332,7 +332,7 @@ class DriveEngine:
         try:
             self._session = aiohttp.ClientSession()
             self._ws = await self._session.ws_connect(
-                self._cfg.restim_url, heartbeat=30)
+                self._cfg.restim_url)
             self._log(f"Connected → {self._cfg.restim_url}")
             return True
         except Exception as e:
@@ -511,12 +511,15 @@ class DriveEngine:
             self._log("Ramp stopped")
         elif "set_driver_name" in cmd:
             self._driver_name = str(cmd["set_driver_name"])[:40]
+            self._shared["__driver_name__"] = self._driver_name
         elif "bottle" in cmd:
             import time
             b = cmd["bottle"]
             self._bottle_mode = b.get("mode", "normal")
             dur = float(b.get("duration", 10))
             self._bottle_until = time.monotonic() + dur
+            self._shared["__bottle_until__"] = self._bottle_until
+            self._shared["__bottle_mode__"] = self._bottle_mode
         else:
             # gesture_stop or any explicit beta_mode change cancels loop
             if cmd.get("gesture_stop") or "beta_mode" in cmd:
@@ -977,14 +980,23 @@ class DriveGUI:
             font=("Arial", 8), foreground=ACCENT)
         self._ctrl_url_lbl.pack(side=tk.LEFT, padx=4)
         self._copy_url_btn = ttk.Button(
-            info, text="Copy", width=5,
+            info, text="Copy", width=7,
             command=lambda: (
                 self.root.clipboard_clear(),
                 self.root.clipboard_append(f"http://localhost:{self.cfg.ctrl_port}"),
-                self._copy_url_btn.configure(text="Copied!"),
+                self._copy_url_btn.configure(text="Copied"),
                 self.root.after(1500, lambda: self._copy_url_btn.configure(text="Copy")),
             ))
         self._copy_url_btn.pack(side=tk.LEFT, padx=2)
+
+        self._driver_status_lbl = ttk.Label(
+            info, text="", font=("Arial", 8), foreground=FG2)
+        self._driver_status_lbl.pack(side=tk.RIGHT, padx=4)
+
+        self._poppers_lbl = ttk.Label(
+            self.root, text="", font=("Arial", 10, "bold"),
+            foreground=WARN)
+        self._poppers_lbl.pack(fill=tk.X, padx=8)
 
         ttk.Separator(self.root, orient=tk.HORIZONTAL).pack(
             fill=tk.X, padx=8, pady=8)
@@ -1181,6 +1193,27 @@ class DriveGUI:
         depth = int(self._shared.get("__cmd_depth__", 1.0) * 100)
         self._state_lbl.config(
             text=f"Pattern: {pat:<8}  Intensity: {it:3d}%  Hz: {hz:.2f}  Depth: {depth}%")
+
+        # Driver name display
+        name = self._shared.get("__driver_name__", "")
+        if name:
+            self._driver_status_lbl.config(text=f"Driver: {name}")
+        elif self._running:
+            self._driver_status_lbl.config(text="Driver: Anonymous")
+        else:
+            self._driver_status_lbl.config(text="")
+
+        # Poppers countdown display
+        import time as _time
+        bottle_until = self._shared.get("__bottle_until__", 0)
+        now = _time.monotonic()
+        if now < bottle_until:
+            remaining = int(bottle_until - now) + 1
+            mode = self._shared.get("__bottle_mode__", "normal")
+            mode_label = mode.replace("_", " ").title()
+            self._poppers_lbl.config(text=f"  POPPERS ({mode_label}) - {remaining}s")
+        else:
+            self._poppers_lbl.config(text="")
 
         self.root.after(150, self._poll)
 

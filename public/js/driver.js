@@ -594,6 +594,8 @@ const TC_ELEC_COLOR= { '1':'#ff4444', '2':'#4488ff', '3':'#ffcc14', '4':'#44cc70
 
 let tcTool        = 'feather';
 let tcPointerDown = false;
+let _tcHovering   = false;
+let _tcHoverX     = 0, _tcHoverY = 0;
 let tcLastX       = 0.5, tcLastY = 0.5;
 let tcTrail       = [];
 let tcPanelInited = false;
@@ -856,6 +858,20 @@ function tcDraw() {
     ctx.shadowColor='transparent';
     ctx.shadowBlur=0;
   }
+  // Hover cursor - visible crosshair when pointer is over canvas but not pressed
+  if (_tcHovering && !tcPointerDown && !_tcLooping) {
+    const hx = _tcHoverX * W, hy = _tcHoverY * H;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 3;
+    ctx.beginPath();
+    ctx.moveTo(hx - 12, hy); ctx.lineTo(hx + 12, hy);
+    ctx.moveTo(hx, hy - 12); ctx.lineTo(hx, hy + 12);
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function tcGetPos(e, canvas) {
@@ -1071,6 +1087,16 @@ function initTouchPanel() {
   document.addEventListener('mouseup',     tcOnUp);
   document.addEventListener('touchend',    tcOnUp);
   document.addEventListener('touchcancel', tcOnUp);
+  canvas.addEventListener('pointerenter', () => { _tcHovering = true; });
+  canvas.addEventListener('pointerleave', () => { _tcHovering = false; requestAnimationFrame(tcDraw); });
+  canvas.addEventListener('pointermove', e => {
+    if (!tcPointerDown) {
+      const r = canvas.getBoundingClientRect();
+      _tcHoverX = (e.clientX - r.left) / r.width;
+      _tcHoverY = (e.clientY - r.top) / r.height;
+      requestAnimationFrame(tcDraw);
+    }
+  });
   const tcRO=new ResizeObserver(entries=>{
     for (const e of entries) {
       if (e.contentRect.width>10&&e.contentRect.height>10) requestAnimationFrame(tcDraw);

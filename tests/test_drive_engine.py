@@ -317,3 +317,32 @@ class TestLanModeFeatures:
         d = json.loads(resp.text)
         assert d["bottle_active"] is False
         assert d["bottle_remaining"] == 0
+
+    @pytest.mark.asyncio
+    async def test_set_driver_name_shared_dict(self, drive_engine):
+        """set_driver_name should push name to shared dict for GUI polling."""
+        await drive_engine._handle_command_data({"set_driver_name": "TestPilot"})
+        assert drive_engine._shared["__driver_name__"] == "TestPilot"
+
+    @pytest.mark.asyncio
+    async def test_bottle_shared_dict(self, drive_engine):
+        """bottle command should push state to shared dict for GUI polling."""
+        import time
+        await drive_engine._handle_command_data({"bottle": {"mode": "deep_huff", "duration": 20}})
+        assert drive_engine._shared["__bottle_mode__"] == "deep_huff"
+        assert drive_engine._shared["__bottle_until__"] > time.monotonic()
+
+
+class TestWebSocketHeartbeat:
+    @pytest.mark.asyncio
+    async def test_connect_no_heartbeat(self, drive_engine):
+        """ws_connect should not use heartbeat (ReStim doesn't respond to pings)."""
+        drive_engine._send_hook = None
+        with patch("aiohttp.ClientSession") as mock_cls:
+            mock_session = AsyncMock()
+            mock_cls.return_value = mock_session
+            mock_session.ws_connect = AsyncMock(return_value=AsyncMock(closed=False))
+            await drive_engine._connect()
+            mock_session.ws_connect.assert_awaited_once()
+            call_kwargs = mock_session.ws_connect.call_args
+            assert 'heartbeat' not in (call_kwargs.kwargs if call_kwargs.kwargs else {})
