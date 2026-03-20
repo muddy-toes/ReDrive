@@ -58,9 +58,10 @@ class DriveConfig:
     restim_url:       str   = "ws://localhost:12346/tcode"
     ctrl_port:        int   = 8765          # HTTP port for driver browser UI
     # T-code axes (must match ReStim Preferences → Funscript/T-Code)
-    axis_volume:      str   = "L0"
+    # ReStim defaults: V0=volume, L0=alpha position, L1=beta position
+    axis_volume:      str   = "V0"
     axis_beta:        str   = "L1"
-    axis_alpha:       str   = "L2"
+    axis_alpha:       str   = "L0"
     # Output floor: min T-code value sent when intensity > 0
     tcode_floor:      int   = 0
     # Beta positions  (9999 = L+ ←── 5000 = Centre ──→ 0 = R+)

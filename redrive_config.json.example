@@ -1,9 +1,9 @@
 {
   "restim_url": "ws://localhost:12346/tcode",
   "ctrl_port": 8765,
-  "axis_volume": "L0",
+  "axis_volume": "V0",
   "axis_beta": "L1",
-  "axis_alpha": "L2",
+  "axis_alpha": "L0",
   "tcode_floor": 0,
   "beta_off": 9999,
   "beta_light": 8099,

@@ -89,7 +89,7 @@ function doStop() {
     body: JSON.stringify({stop:true})});
   // Send zero to ReStim directly
   if (_restimWs && _restimWs.readyState === WebSocket.OPEN) {
-    try { _restimWs.send('L00000I200 L10000I200 L25000I200'); } catch(_) {}
+    try { _restimWs.send('V00000I200 L00000I200 L15000I200'); } catch(_) {}
   }
   const btn = document.getElementById('stop-btn');
   if (btn) { btn.textContent = '\u25b6 RESUME'; btn.style.background = 'var(--ok)'; }
