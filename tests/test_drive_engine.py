@@ -256,3 +256,64 @@ class TestSessionManagement:
 
         assert drive_engine._ws is None
         assert drive_engine._session is None
+
+
+class TestLanModeFeatures:
+    @pytest.mark.asyncio
+    async def test_set_driver_name(self, drive_engine):
+        """set_driver_name command should store the name."""
+        await drive_engine._handle_command_data({"set_driver_name": "Scott"})
+        assert drive_engine._driver_name == "Scott"
+
+    @pytest.mark.asyncio
+    async def test_set_driver_name_truncates(self, drive_engine):
+        """Driver name should be truncated to 40 chars."""
+        await drive_engine._handle_command_data({"set_driver_name": "A" * 100})
+        assert len(drive_engine._driver_name) == 40
+
+    @pytest.mark.asyncio
+    async def test_bottle_command(self, drive_engine):
+        """bottle command should set bottle state."""
+        import time
+        await drive_engine._handle_command_data({"bottle": {"mode": "deep_huff", "duration": 15}})
+        assert drive_engine._bottle_mode == "deep_huff"
+        assert drive_engine._bottle_until > time.monotonic()
+
+    @pytest.mark.asyncio
+    async def test_bottle_defaults(self, drive_engine):
+        """bottle command with no mode/duration should use defaults."""
+        import time
+        await drive_engine._handle_command_data({"bottle": {}})
+        assert drive_engine._bottle_mode == "normal"
+        assert drive_engine._bottle_until > time.monotonic()
+
+    @pytest.mark.asyncio
+    async def test_rider_state_endpoint(self, drive_engine):
+        """rider-state should return intensity, bottle, and driver name."""
+        drive_engine._driver_name = "TestDriver"
+        resp = await drive_engine._handle_rider_state(None)
+        d = json.loads(resp.text)
+        assert "intensity" in d
+        assert "bottle_active" in d
+        assert "bottle_remaining" in d
+        assert "bottle_mode" in d
+        assert d["driver_name"] == "TestDriver"
+
+    @pytest.mark.asyncio
+    async def test_rider_state_bottle_active(self, drive_engine):
+        """rider-state should reflect active bottle."""
+        import time
+        drive_engine._bottle_until = time.monotonic() + 30
+        drive_engine._bottle_mode = "normal"
+        resp = await drive_engine._handle_rider_state(None)
+        d = json.loads(resp.text)
+        assert d["bottle_active"] is True
+        assert d["bottle_remaining"] > 0
+
+    @pytest.mark.asyncio
+    async def test_rider_state_bottle_inactive(self, drive_engine):
+        """rider-state should show inactive bottle when expired."""
+        resp = await drive_engine._handle_rider_state(None)
+        d = json.loads(resp.text)
+        assert d["bottle_active"] is False
+        assert d["bottle_remaining"] == 0

@@ -307,6 +307,10 @@ class DriveEngine:
         self._gesture_active:   bool  = False
         self._gesture_seq:      list  = []  # [(t_rel, beta, intensity), ...]
         self._gesture_t:        float = 0.0
+        # LAN mode: driver name + bottle (popper) state
+        self._driver_name:     str   = ""
+        self._bottle_until:    float = 0.0
+        self._bottle_mode:     str   = "normal"
 
     def _log(self, msg: str):
         self._log_q.put_nowait(msg)
@@ -505,6 +509,14 @@ class DriveEngine:
         elif cmd.get("ramp_stop"):
             self._ramp_active = False
             self._log("Ramp stopped")
+        elif "set_driver_name" in cmd:
+            self._driver_name = str(cmd["set_driver_name"])[:40]
+        elif "bottle" in cmd:
+            import time
+            b = cmd["bottle"]
+            self._bottle_mode = b.get("mode", "normal")
+            dur = float(b.get("duration", 10))
+            self._bottle_until = time.monotonic() + dur
         else:
             # gesture_stop or any explicit beta_mode change cancels loop
             if cmd.get("gesture_stop") or "beta_mode" in cmd:
@@ -585,12 +597,27 @@ class DriveEngine:
         }
         return web.Response(text=json.dumps(d), content_type="application/json")
 
+    async def _handle_rider_state(self, _req):
+        import time
+        now = time.monotonic()
+        active = now < self._bottle_until
+        remaining = max(0, self._bottle_until - now) if active else 0
+        d = {
+            "intensity": self._pattern.intensity,
+            "bottle_active": active,
+            "bottle_remaining": round(remaining, 1),
+            "bottle_mode": self._bottle_mode,
+            "driver_name": self._driver_name,
+        }
+        return web.Response(text=json.dumps(d), content_type="application/json")
+
     async def _start_http(self):
         app = web.Application()
         app.router.add_get("/",                              self._handle_index)
         app.router.add_get("/touch",                         self._handle_touch)
         app.router.add_post("/command",                      self._handle_command)
         app.router.add_get("/state",                         self._handle_state)
+        app.router.add_get("/rider-state",                   self._handle_rider_state)
         app.router.add_static("/public",                     str(Path(__file__).parent / "public"))
         app.router.add_get("/touch_assets/list",             self._handle_assets_list)
         app.router.add_get("/touch_assets/{type}/{name}",    self._handle_assets_file)
