@@ -52,7 +52,7 @@ On first run, `redrive_config.json` is created with defaults. Copy `redrive_conf
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `restim_url` | `ws://localhost:12346` | ReStim WebSocket address |
+| `restim_url` | `ws://localhost:12346/tcode` | ReStim WebSocket address |
 | `ctrl_port` | `8765` | Port for the driver browser UI |
 | `axis_volume` | `L0` | T-code axis for intensity |
 | `axis_beta` | `L1` | T-code axis for electrode position |
@@ -76,12 +76,22 @@ Reassign to match however the rider has physically wired their electrode — no 
 
 ## Adding presets
 
-Presets are stored in two places that must stay in sync:
+Presets live in the `PRESETS` dict near the top of `redrive.py`. The driver UI
+fetches the preset list and syncs all sliders from the server's `/state`
+endpoint automatically - no client-side duplication needed.
 
-1. `PRESETS` dict near the top of `redrive.py` (applied server-side)
-2. `JS_PRESETS` object in the `DRIVER_HTML` string (updates the driver UI sliders)
+---
 
-Both are marked with a warning comment pointing at each other.
+## Running tests
+
+```bash
+python -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m pytest tests/ -v
+```
+
+The test suite covers the pattern engine, drive engine command handling, room
+lifecycle, and HTTP route integration tests (auth, state, presets).
 
 ---
 

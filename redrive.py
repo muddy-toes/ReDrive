@@ -85,7 +85,7 @@ PRESETS: dict[str, dict] = {
 
 @dataclass
 class DriveConfig:
-    restim_url:       str   = "ws://localhost:12346"
+    restim_url:       str   = "ws://localhost:12346/tcode"
     ctrl_port:        int   = 8765          # HTTP port for driver browser UI
     # T-code axes (must match ReStim Preferences → Funscript/T-Code)
     axis_volume:      str   = "L0"
@@ -949,6 +949,15 @@ class DriveGUI:
             text=f"http://localhost:{self.cfg.ctrl_port}  (start engine first)",
             font=("Arial", 8), foreground=ACCENT)
         self._ctrl_url_lbl.pack(side=tk.LEFT, padx=4)
+        self._copy_url_btn = ttk.Button(
+            info, text="Copy", width=5,
+            command=lambda: (
+                self.root.clipboard_clear(),
+                self.root.clipboard_append(f"http://localhost:{self.cfg.ctrl_port}"),
+                self._copy_url_btn.configure(text="Copied!"),
+                self.root.after(1500, lambda: self._copy_url_btn.configure(text="Copy")),
+            ))
+        self._copy_url_btn.pack(side=tk.LEFT, padx=2)
 
         ttk.Separator(self.root, orient=tk.HORIZONTAL).pack(
             fill=tk.X, padx=8, pady=8)
