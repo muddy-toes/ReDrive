@@ -175,9 +175,12 @@ Panels use `backdrop-filter: blur(20px)` glass morphism. Rider cards are portrai
 - [ ] Route naming: `/room/{code}/rider` serves TOUCH_HTML (rider status page) **and** is the WebSocket upgrade endpoint — these currently coexist via content-negotiation but should be verified
 - [ ] `redrive.py` vs `server/server.py` — the local `redrive.py` has its own embedded HTTP server (aiohttp); the hosted relay is `server/server.py`. They share DRIVER_HTML/TOUCH_HTML templates but are separate deployments. The local app is for direct LAN use; the server is for internet relay.
 
-BUGS: -The driver hasen't yet confirled seeing riders as either custom images or default ones
+BUGS:
+- The driver hasen't yet confirled seeing riders as either custom images or default ones
 - the UI is kinda big and ugly
 - a drivers UI elements  unified across
+
+- oh and write installers for the drivers to download and add their own pics in it so the custom pics stay local because privacy also i don't want people uploading random stuff and clogging my droplet 
 
 ## Running locally (LAN mode)
 
