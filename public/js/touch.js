@@ -2,6 +2,61 @@
 const _ROOM_CODE = (typeof ROOM_CODE !== 'undefined') ? ROOM_CODE : null;
 const _BASE = _ROOM_CODE ? '/room/' + _ROOM_CODE : '';
 
+// ── ReStim bridge ──────────────────────────────────────────────────────────
+// In relay mode, the rider's browser forwards T-code from the relay WS
+// directly to their local ReStim device via WebSocket.
+let _restimWs = null;
+let _restimUrl = localStorage.getItem('reDriveRestimUrl') || 'ws://localhost:12346/tcode';
+let _restimEnabled = localStorage.getItem('reDriveRestimEnabled') !== 'false';
+let _restimConnected = false;
+
+function connectRestim() {
+  if (!_restimEnabled || _restimWs) return;
+  try {
+    const ws = new WebSocket(_restimUrl);
+    ws.onopen = () => {
+      _restimWs = ws;
+      _restimConnected = true;
+      updateRestimStatus();
+      console.log('ReStim connected:', _restimUrl);
+    };
+    ws.onclose = () => {
+      _restimWs = null;
+      _restimConnected = false;
+      updateRestimStatus();
+      if (_restimEnabled) setTimeout(connectRestim, 3000);
+    };
+    ws.onerror = () => { try { ws.close(); } catch(_) {} };
+  } catch(e) {
+    console.warn('ReStim connect error:', e);
+    setTimeout(connectRestim, 5000);
+  }
+}
+
+function disconnectRestim() {
+  if (_restimWs) {
+    try { _restimWs.close(); } catch(_) {}
+    _restimWs = null;
+  }
+  _restimConnected = false;
+  updateRestimStatus();
+}
+
+function updateRestimStatus() {
+  const el = document.getElementById('restim-status');
+  if (!el) return;
+  if (!_restimEnabled) {
+    el.textContent = 'ReStim: disabled';
+    el.style.color = 'var(--fg2)';
+  } else if (_restimConnected) {
+    el.textContent = 'ReStim: connected';
+    el.style.color = 'var(--ok)';
+  } else {
+    el.textContent = 'ReStim: connecting...';
+    el.style.color = 'var(--warn)';
+  }
+}
+
 // ── Connection status ────────────────────────────────────────────────────────
 function setConn(ok) {
   document.getElementById('cdot').style.background = ok ? 'var(--ok)' : 'var(--err)';
@@ -202,8 +257,13 @@ function updateDriverStatus(connected, name) {
       };
       ws.onmessage = ev => {
         const d = ev.data;
-        // T-code (raw string, not JSON)
-        if (!d.startsWith('{')) return;
+        // T-code (raw string, not JSON) - forward to local ReStim
+        if (!d.startsWith('{')) {
+          if (_restimWs && _restimWs.readyState === WebSocket.OPEN) {
+            try { _restimWs.send(d); } catch(_) {}
+          }
+          return;
+        }
         try {
           const msg = JSON.parse(d);
           switch (msg.type) {
@@ -271,6 +331,42 @@ async function onAnatFileSelected(input) {
     if (btn) { btn.childNodes[0].textContent = '✗ Error'; setTimeout(()=>{ btn.childNodes[0].textContent = orig; }, 2000); }
   }
 }
+
+// ── ReStim settings UI ─────────────────────────────────────────────────────
+function toggleSettings() {
+  const panel = document.getElementById('settings-panel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function onRestimToggle(checked) {
+  _restimEnabled = checked;
+  localStorage.setItem('reDriveRestimEnabled', checked ? 'true' : 'false');
+  if (checked) {
+    connectRestim();
+  } else {
+    disconnectRestim();
+  }
+}
+
+function saveRestimUrl() {
+  const input = document.getElementById('restim-url-input');
+  const url = input.value.trim();
+  if (!url) return;
+  _restimUrl = url;
+  localStorage.setItem('reDriveRestimUrl', url);
+  disconnectRestim();
+  if (_restimEnabled) setTimeout(connectRestim, 500);
+}
+
+// Initialize ReStim settings UI and connection
+(function initRestim() {
+  const restimToggle = document.getElementById('restim-toggle');
+  if (restimToggle) restimToggle.checked = _restimEnabled;
+  const restimUrlInput = document.getElementById('restim-url-input');
+  if (restimUrlInput) restimUrlInput.value = _restimUrl;
+  updateRestimStatus();
+  if (_restimEnabled) connectRestim();
+})();
 
 // Auto-upload saved anatomy when joining a room
 (async function autoUploadAnatomy() {
