@@ -73,10 +73,26 @@ function updatePower(v) {
   v > 0.01 ? bar.classList.add('live') : bar.classList.remove('live');
 }
 
-// ── STOP ─────────────────────────────────────────────────────────────────────
+// ── STOP / RESUME ────────────────────────────────────────────────────────────
+let _riderStopped = false;
 function doStop() {
+  if (_riderStopped) {
+    // Resume: re-enable ReStim forwarding
+    _riderStopped = false;
+    const btn = document.getElementById('stop-btn');
+    if (btn) { btn.textContent = '\u25a0 STOP'; btn.style.background = 'var(--err)'; }
+    return;
+  }
+  // Stop: tell server to zero output, pause ReStim forwarding
+  _riderStopped = true;
   fetch(_BASE + '/command', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({stop:true})});
+  // Send zero to ReStim directly
+  if (_restimWs && _restimWs.readyState === WebSocket.OPEN) {
+    try { _restimWs.send('L00000I200 L10000I200 L25000I200'); } catch(_) {}
+  }
+  const btn = document.getElementById('stop-btn');
+  if (btn) { btn.textContent = '\u25b6 RESUME'; btn.style.background = 'var(--ok)'; }
 }
 
 // ── Room code copy ────────────────────────────────────────────────────────────
@@ -162,6 +178,15 @@ function hideBottleOverlay() {
   const ov = document.getElementById('bottle-overlay');
   if (ov) ov.style.display = 'none';
 }
+
+// Dismiss poppers overlay via Esc or click (safety: rider must be able to reach STOP)
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && _bottleOverlayActive) hideBottleOverlay();
+});
+document.addEventListener('DOMContentLoaded', () => {
+  const ov = document.getElementById('bottle-overlay');
+  if (ov) ov.addEventListener('click', () => { if (_bottleOverlayActive) hideBottleOverlay(); });
+});
 
 // ── Rider name ────────────────────────────────────────────────────────────────
 let _riderWs = null, _riderNameTimer = null;
@@ -259,7 +284,7 @@ function updateDriverStatus(connected, name) {
         const d = ev.data;
         // T-code (raw string, not JSON) - forward to local ReStim
         if (!d.startsWith('{')) {
-          if (_restimWs && _restimWs.readyState === WebSocket.OPEN) {
+          if (!_riderStopped && _restimWs && _restimWs.readyState === WebSocket.OPEN) {
             try { _restimWs.send(d); } catch(_) {}
           }
           return;
@@ -270,6 +295,9 @@ function updateDriverStatus(connected, name) {
             case 'rider_state':
               setConn(true);
               updatePower(msg.intensity ?? 0);
+              // Update bottle countdown from periodic rider_state push
+              if (msg.bottle_active) showBottleOverlay(msg.bottle_mode || 'normal', msg.bottle_remaining || 0);
+              else if (_bottleOverlayActive) hideBottleOverlay();
               break;
             case 'bottle_status':
               if (msg.active) showBottleOverlay(msg.mode || 'normal', msg.remaining || 0);

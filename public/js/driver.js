@@ -616,7 +616,7 @@ let _tcParticipants = []; // latest participants list from WS
 
 function tcElecAt() {
   const valid = ['1','2','3','4'];
-  const def = { tip:'2', balls:'3', anus:'1' };
+  const def = { tip:'1', balls:'2', anus:'4' };
   try {
     const stored = JSON.parse(localStorage.getItem('elecAt') || 'null');
     if (!stored || typeof stored !== 'object') return def;
