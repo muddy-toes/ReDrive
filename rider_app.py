@@ -237,6 +237,18 @@ class RiderApp:
                                     font=("Helvetica", 11))
         self._status_lbl.pack(side="left")
 
+        # ── Driver / poppers indicators ──────────────────────────────────────
+        info_row = tk.Frame(self.root, bg=BG)
+        info_row.pack(fill="x", padx=16, pady=(0, 6))
+        self._driver_indicator = tk.Label(
+            info_row, text="Driver: unknown", bg=BG, fg=FG2,
+            font=("Helvetica", 9))
+        self._driver_indicator.pack(side="left")
+        self._poppers_lbl = tk.Label(
+            info_row, text="", bg=BG, fg=WARN,
+            font=("Helvetica", 9, "bold"))
+        self._poppers_lbl.pack(side="right")
+
         # ── Log area ──────────────────────────────────────────────────────────
         log_outer = tk.Frame(self.root, bg=BORDER, bd=1, relief="flat")
         log_outer.pack(fill="both", expand=True, padx=16, pady=(0, 4))
@@ -327,6 +339,28 @@ class RiderApp:
             self._status_lbl.config(text=text)
         self.root.after(0, _do)
 
+    # ── JSON message handlers ────────────────────────────────────────────────
+
+    def _on_driver_status(self, data):
+        connected = data.get("connected", False)
+        name = data.get("name", "Anonymous") or "Anonymous"
+        color = "#4ade80" if connected else "#f43f5e"
+        text = f"Driver: {name}" if connected else "Driver: disconnected"
+        self.root.after(0, lambda: self._driver_indicator.config(
+            text=text, foreground=color))
+
+    def _on_bottle_status(self, data):
+        if data.get("active"):
+            remaining = int(data.get("remaining", 0))
+            mode = data.get("mode", "normal").replace("_", " ").title()
+            self.root.after(0, lambda: self._poppers_lbl.config(
+                text=f"POPPERS ({mode}) - {remaining}s"))
+        else:
+            self.root.after(0, lambda: self._poppers_lbl.config(text=""))
+
+    def _on_rider_state(self, data):
+        pass  # Placeholder for future use
+
     # ── Connect / disconnect ──────────────────────────────────────────────────
 
     def _toggle_connect(self):
@@ -394,7 +428,7 @@ class RiderApp:
         self._loop.run_until_complete(self._rider_loop(room, relay, restim))
 
     async def _rider_loop(self, room: str, relay: str, restim: str):
-        relay_url       = f"{relay}/ws/rider/{room}"
+        relay_url       = f"{relay}/room/{room}/rider-ws"
         RECONNECT_DELAY = 5.0
 
         # Derive relay_host from the relay URL (strip scheme)
@@ -429,6 +463,19 @@ class RiderApp:
                                     if self._stop_ev.is_set():
                                         break
                                     if msg.type == aiohttp.WSMsgType.TEXT:
+                                        if msg.data.startswith('{'):
+                                            try:
+                                                data = json.loads(msg.data)
+                                                msg_type = data.get("type")
+                                                if msg_type == "driver_status":
+                                                    self._on_driver_status(data)
+                                                elif msg_type == "bottle_status":
+                                                    self._on_bottle_status(data)
+                                                elif msg_type == "rider_state":
+                                                    self._on_rider_state(data)
+                                            except json.JSONDecodeError:
+                                                pass
+                                            continue
                                         try:
                                             await restim_ws.send_str(msg.data)
                                         except Exception:
