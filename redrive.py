@@ -1224,7 +1224,7 @@ class DriveGUI:
                   command=self._on_intensity, length=200).grid(
             row=0, column=1, padx=4, sticky="w")
         ttk.Label(sliders, text="Set max power limits in\nReStim Preferences",
-                  font=("Arial", 7), foreground=FG2, justify="left").grid(
+                  font=("Arial", 9), foreground="#fbbf24", justify="left").grid(
             row=0, column=3, rowspan=2, sticky="nw", padx=(8, 0))
 
         ttk.Label(sliders, text="Speed (Hz)", width=12).grid(

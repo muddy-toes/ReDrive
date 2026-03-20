@@ -866,7 +866,7 @@ function tcDraw() {
     ctx.shadowBlur=0;
   }
   // Hover cursor - visible crosshair when pointer is over canvas but not pressed
-  if (_tcHovering && !tcPointerDown && !_tcLooping) {
+  if (_tcHovering && !tcPointerDown) {
     const hx = _tcHoverX * W, hy = _tcHoverY * H;
     ctx.save();
     ctx.strokeStyle = 'rgba(255,255,255,0.6)';
@@ -892,6 +892,7 @@ function tcGetPos(e, canvas) {
 function tcOnDown(e) {
   e.preventDefault();
   tcPointerDown=true;
+  if (_tcLooping) sendCmd({gesture_stop: true});
   _tcGesturePath=[]; _tcGestureStart=performance.now(); tcSetLooping(false);
   const canvas=document.getElementById('touch-canvas');
   const pos=tcGetPos(e,canvas);
@@ -919,6 +920,13 @@ function tcOnUp() {
   if (dur>=0.5 && _tcGesturePath.length>=6) {
     _tcLoopStart=performance.now(); _tcLoopDur=dur*1000;
     tcSetLooping(true);
+    // Send gesture to engine for server-side looping
+    const pts = _tcGesturePath.map(p => ({
+      t: p.t / 1000,
+      beta: tcBetaFromY(p.y),
+      intensity: tcIntFromX(p.x),
+    }));
+    sendCmd({gesture_record: pts});
   }
   tcDraw();
 }
@@ -1133,7 +1141,7 @@ function initTouchPanel() {
         tcDraw();
       } else {
         tcTrail=tcTrail.filter(p=>now-p.t<1800);
-        if (tcTrail.length||tcPointerDown) tcDraw();
+        if (tcTrail.length||tcPointerDown||_tcHovering) tcDraw();
       }
     }
     requestAnimationFrame(tcTrailTick);
