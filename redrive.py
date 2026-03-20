@@ -311,6 +311,9 @@ class DriveEngine:
         self._driver_name:     str   = ""
         self._bottle_until:    float = 0.0
         self._bottle_mode:     str   = "normal"
+        # LAN mode WebSocket tracking
+        self._driver_wss: set = set()
+        self._rider_wss:  set = set()
 
     def _log(self, msg: str):
         self._log_q.put_nowait(msg)
@@ -353,6 +356,15 @@ class DriveEngine:
                 return
         try:
             await self._ws.send_str(cmd)
+            # Fan out T-code to rider WebSockets
+            if self._rider_wss:
+                dead = set()
+                for rws in list(self._rider_wss):
+                    try:
+                        await rws.send_str(cmd)
+                    except Exception:
+                        dead.add(rws)
+                self._rider_wss -= dead
         except Exception as e:
             self._log(f"Send error: {e}")
             try:
@@ -520,6 +532,14 @@ class DriveEngine:
             self._bottle_until = time.monotonic() + dur
             self._shared["__bottle_until__"] = self._bottle_until
             self._shared["__bottle_mode__"] = self._bottle_mode
+            # Immediate push to rider WebSockets
+            if self._rider_wss:
+                await self._broadcast_to_riders(json.dumps({
+                    "type": "bottle_status",
+                    "active": True,
+                    "remaining": dur,
+                    "mode": self._bottle_mode,
+                }))
         else:
             # gesture_stop or any explicit beta_mode change cancels loop
             if cmd.get("gesture_stop") or "beta_mode" in cmd:
@@ -572,8 +592,9 @@ class DriveEngine:
         self._shared["__cmd_depth__"]     = self._pattern.depth
         return web.Response(text="ok")
 
-    async def _handle_state(self, _req):
-        d = {
+    def _build_state_dict(self):
+        """Build the driver state dict (used by HTTP and WS endpoints)."""
+        return {
             "vol":           self._shared.get("__live__l0", 0.0),
             "beta":          int(self._shared.get("__live__l1",
                                  self._cfg.beta_off / 9999.0) * 9999),
@@ -598,32 +619,131 @@ class DriveEngine:
             "gesture_dur":     self._gesture_seq[-1][0] if self._gesture_seq else 0.0,
             "presets":         list(PRESETS.keys()),
         }
-        return web.Response(text=json.dumps(d), content_type="application/json")
 
-    async def _handle_rider_state(self, _req):
+    def _build_rider_state_dict(self):
+        """Build rider state dict (used by HTTP and WS endpoints)."""
         import time
         now = time.monotonic()
         active = now < self._bottle_until
         remaining = max(0, self._bottle_until - now) if active else 0
-        d = {
+        return {
             "intensity": self._pattern.intensity,
             "bottle_active": active,
             "bottle_remaining": round(remaining, 1),
             "bottle_mode": self._bottle_mode,
             "driver_name": self._driver_name,
         }
+
+    async def _handle_state(self, _req):
+        d = self._build_state_dict()
         return web.Response(text=json.dumps(d), content_type="application/json")
 
-    async def _start_http(self):
+    async def _handle_rider_state(self, _req):
+        d = self._build_rider_state_dict()
+        return web.Response(text=json.dumps(d), content_type="application/json")
+
+    # ── WebSocket handlers (LAN mode) ────────────────────────────────────────
+
+    async def _handle_driver_ws(self, req):
+        ws = web.WebSocketResponse(max_msg_size=65536)
+        await ws.prepare(req)
+        self._driver_wss.add(ws)
+
+        # Send initial state
+        state = self._build_state_dict()
+        await ws.send_str(json.dumps({"type": "state", "data": state}))
+
+        # Broadcast driver_status to riders
+        await self._broadcast_to_riders(json.dumps({
+            "type": "driver_status",
+            "connected": True,
+            "name": self._driver_name or "Anonymous",
+        }))
+
+        try:
+            async for msg in ws:
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    try:
+                        data = json.loads(msg.data)
+                        if data.get("type") == "command":
+                            cmd = data.get("data", {})
+                            await self._process_command(cmd)
+                            await ws.send_str(json.dumps({"type": "command_ack", "ok": True}))
+                        elif data.get("type") == "ping":
+                            await ws.send_str(json.dumps({"type": "pong"}))
+                    except Exception as e:
+                        await ws.send_str(json.dumps({
+                            "type": "command_ack", "ok": False, "error": str(e),
+                        }))
+                elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSE):
+                    break
+        finally:
+            self._driver_wss.discard(ws)
+            if not self._driver_wss:
+                await self._broadcast_to_riders(json.dumps({
+                    "type": "driver_status",
+                    "connected": False,
+                    "name": "",
+                }))
+        return ws
+
+    async def _handle_rider_ws(self, req):
+        ws = web.WebSocketResponse(max_msg_size=65536)
+        await ws.prepare(req)
+        self._rider_wss.add(ws)
+
+        # Send initial rider state
+        rstate = self._build_rider_state_dict()
+        rstate["type"] = "rider_state"
+        await ws.send_str(json.dumps(rstate))
+
+        # Send current driver status
+        driver_connected = len(self._driver_wss) > 0
+        await ws.send_str(json.dumps({
+            "type": "driver_status",
+            "connected": driver_connected,
+            "name": self._driver_name or ("Anonymous" if driver_connected else ""),
+        }))
+
+        try:
+            async for msg in ws:
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    pass  # rider messages (future: set_name, like, etc.)
+                elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSE):
+                    break
+        finally:
+            self._rider_wss.discard(ws)
+        return ws
+
+    async def _broadcast_to_riders(self, msg_str: str):
+        """Send a string message to all connected rider WebSockets."""
+        dead = set()
+        for ws in list(self._rider_wss):
+            try:
+                await ws.send_str(msg_str)
+            except Exception:
+                dead.add(ws)
+        self._rider_wss -= dead
+
+    # ── App builder + HTTP server ─────────────────────────────────────────
+
+    def _build_app(self):
+        """Build and return the aiohttp Application with all routes."""
         app = web.Application()
         app.router.add_get("/",                              self._handle_index)
         app.router.add_get("/touch",                         self._handle_touch)
         app.router.add_post("/command",                      self._handle_command)
         app.router.add_get("/state",                         self._handle_state)
         app.router.add_get("/rider-state",                   self._handle_rider_state)
+        app.router.add_get("/driver-ws",                     self._handle_driver_ws)
+        app.router.add_get("/rider-ws",                      self._handle_rider_ws)
         app.router.add_static("/public",                     str(Path(__file__).parent / "public"))
         app.router.add_get("/touch_assets/list",             self._handle_assets_list)
         app.router.add_get("/touch_assets/{type}/{name}",    self._handle_assets_file)
+        return app
+
+    async def _start_http(self):
+        app = self._build_app()
         # Ensure asset directories exist at startup
         for sub in ("anatomy", "tools"):
             (Path(__file__).parent / "touch_assets" / sub).mkdir(parents=True, exist_ok=True)
@@ -813,6 +933,49 @@ class DriveEngine:
 
             await asyncio.sleep(dt)
 
+    # ── State push loop (WS broadcast) ──────────────────────────────────────
+
+    async def _state_push_loop(self):
+        """Push state to driver WS at 5Hz and rider state at ~2Hz."""
+        import time
+        rider_tick = 0
+        while not self._stop_ev.is_set():
+            await asyncio.sleep(0.2)
+            # Driver state push
+            if self._driver_wss:
+                state = self._build_state_dict()
+                msg = json.dumps({"type": "state", "data": state})
+                dead = set()
+                for ws in list(self._driver_wss):
+                    try:
+                        await ws.send_str(msg)
+                    except Exception:
+                        dead.add(ws)
+                self._driver_wss -= dead
+
+            # Rider state push (every ~600ms)
+            rider_tick += 1
+            if rider_tick >= 3 and self._rider_wss:
+                rider_tick = 0
+                now = time.monotonic()
+                active = now < self._bottle_until
+                rmsg = json.dumps({
+                    "type": "rider_state",
+                    "intensity": self._pattern.intensity,
+                    "bottle_active": active,
+                    "bottle_remaining": round(max(0, self._bottle_until - now), 1) if active else 0,
+                    "bottle_mode": self._bottle_mode,
+                    "driver_name": self._driver_name,
+                    "driver_connected": len(self._driver_wss) > 0,
+                })
+                dead = set()
+                for ws in list(self._rider_wss):
+                    try:
+                        await ws.send_str(rmsg)
+                    except Exception:
+                        dead.add(ws)
+                self._rider_wss -= dead
+
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     async def _run_async(self):
@@ -833,7 +996,9 @@ class DriveEngine:
             )
 
         try:
-            await asyncio.gather(self._pattern_loop(), self._alpha_loop())
+            await asyncio.gather(
+                self._pattern_loop(), self._alpha_loop(), self._state_push_loop()
+            )
         finally:
             if self._ws and not self._ws.closed:
                 await self._ws.close()
