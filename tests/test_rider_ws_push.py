@@ -46,11 +46,16 @@ class TestRiderWSPush:
         driver_ws = await client.ws_connect(f"/room/{code}/driver-ws?key={key}")
         await driver_ws.receive_json()  # driver gets initial state
 
-        # Rider should receive driver_status and participants_update
+        # Rider should receive driver_status (may also get rider_state, T-code, etc.)
         found_status = False
-        for _ in range(5):
+        for _ in range(15):
             try:
-                msg = await asyncio.wait_for(rider_ws.receive_json(), timeout=1.0)
+                raw = await asyncio.wait_for(rider_ws.receive(), timeout=0.5)
+                if raw.type != aiohttp.WSMsgType.TEXT:
+                    continue
+                if not raw.data.startswith("{"):
+                    continue
+                msg = json.loads(raw.data)
                 if msg.get("type") == "driver_status":
                     assert msg["connected"] is True
                     found_status = True
