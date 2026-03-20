@@ -28,7 +28,7 @@ chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
 # --- Python venv ---
 sudo -u "$APP_USER" python3 -m venv "$APP_DIR/.venv"
-sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -q aiohttp
+sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -q aiohttp jinja2 aiohttp-jinja2
 
 # --- Touch asset directories ---
 sudo -u "$APP_USER" mkdir -p "$APP_DIR/touch_assets/anatomy" "$APP_DIR/touch_assets/tools"

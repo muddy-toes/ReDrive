@@ -1,18 +1,9 @@
 """Shared fixtures for ReDrive test suite."""
 
-import sys
 import queue
-from unittest.mock import MagicMock
-
-# Mock tkinter BEFORE any imports from redrive or server.
-# These modules reference tkinter at import time.
-sys.modules.setdefault("tkinter", MagicMock())
-sys.modules.setdefault("tkinter.ttk", MagicMock())
 
 import pytest
 from engine import DriveConfig, DriveEngine, PatternEngine
-# Import redrive to attach HTTP handler methods onto DriveEngine for tests
-import redrive  # noqa: F401 — side-effect: patches DriveEngine with HTTP handlers
 from server import build_app, _rooms
 
 

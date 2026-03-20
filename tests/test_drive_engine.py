@@ -1,4 +1,4 @@
-"""Tests for DriveEngine (redrive.py lines 2440-2964).
+"""Tests for DriveEngine.
 
 Uses _handle_command_data(cmd) directly (async) and _handle_state(None)
 to inspect engine state.

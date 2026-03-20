@@ -1,4 +1,4 @@
-"""Tests for PatternEngine (redrive.py lines 143-260)."""
+"""Tests for PatternEngine (engine.py)."""
 
 import pytest
 from engine import PatternEngine, PATTERNS

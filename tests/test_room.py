@@ -1,4 +1,4 @@
-"""Tests for Room class (server/server.py lines 55-155)."""
+"""Tests for Room class (server.py)."""
 
 import asyncio
 import time

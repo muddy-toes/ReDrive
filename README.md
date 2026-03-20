@@ -23,7 +23,7 @@ The **rider** runs ReDrive on their machine and connects it to ReStim. The **dri
 ## Requirements
 
 ```
-pip install aiohttp
+pip install aiohttp jinja2 aiohttp-jinja2
 ```
 
 ReStim must be running and have its WebSocket server enabled (default `ws://localhost:12346`).
@@ -32,17 +32,29 @@ ReStim must be running and have its WebSocket server enabled (default `ws://loca
 
 ## Usage
 
+### LAN mode (single rider, local ReStim)
+
 ```
-python redrive.py
+python server.py --local
 ```
+
+This starts a single-room server that connects directly to your local ReStim instance. URLs for the driver and rider pages are printed on startup.
 
 | Who    | What to open |
 |--------|-------------|
-| Rider  | Just run the script — keep the terminal visible for status |
-| Driver (desktop) | `http://<rider-ip>:8765` |
-| Driver (phone)   | `http://<rider-ip>:8765/touch` |
+| Rider  | Open the rider URL printed at startup, or the `/touch` page on your phone |
+| Driver (desktop) | Open the driver URL printed at startup |
+| Driver (phone)   | Same driver URL on your phone |
 
 The rider always controls their own maximum power on their ReStim device. ReDrive only controls pattern shape and relative intensity within that limit.
+
+### Relay mode (multi-rider, cloud server)
+
+```
+python server.py --port 8765
+```
+
+Starts the relay server. Drivers create rooms; riders connect via room codes. The browser rider page can connect to ReStim directly using the ReStim Bridge (no separate client needed).
 
 ---
 
@@ -76,7 +88,7 @@ Reassign to match however the rider has physically wired their electrode — no 
 
 ## Adding presets
 
-Presets live in the `PRESETS` dict near the top of `redrive.py`. The driver UI
+Presets live in the `PRESETS` dict in `engine.py`. The driver UI
 fetches the preset list and syncs all sliders from the server's `/state`
 endpoint automatically - no client-side duplication needed.
 
@@ -118,7 +130,7 @@ that forwards T-code from the relay to the local ReStim WebSocket.
 
 ```bash
 # On the server (as root):
-bash server/setup.sh
+bash deploy/setup.sh
 ```
 
 The script installs nginx, certbot, a Python venv, the systemd service, and

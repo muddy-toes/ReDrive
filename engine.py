@@ -1,7 +1,7 @@
 """engine.py — ReDrive core: pattern generation + ReStim connection.
 
-Pure engine logic with ZERO tkinter dependencies and ZERO HTTP serving code.
-Import this from server.py or redrive.py to drive the ReStim hardware.
+Pure engine logic with no tkinter dependencies.
+Import this from server.py to drive the ReStim hardware.
 """
 
 import asyncio
@@ -738,6 +738,127 @@ class DriveEngine:
                 self._shared["__live__l2"] = eff
 
             await asyncio.sleep(dt)
+
+    # ── HTTP handler wrappers (used in LAN mode tests) ─────────────────────
+
+    async def _handle_command(self, req):
+        from aiohttp import web
+        try:
+            cmd = await req.json()
+        except Exception:
+            return web.Response(status=400)
+        await self._process_command(cmd)
+        return web.Response(text="ok")
+
+    async def _handle_state(self, _req):
+        from aiohttp import web
+        d = self._build_state_dict()
+        return web.Response(text=json.dumps(d), content_type="application/json")
+
+    async def _handle_rider_state(self, _req):
+        from aiohttp import web
+        d = self._build_rider_state_dict()
+        return web.Response(text=json.dumps(d), content_type="application/json")
+
+    async def _handle_driver_ws(self, req):
+        from aiohttp import web
+        ws = web.WebSocketResponse(max_msg_size=65536)
+        await ws.prepare(req)
+        self._driver_wss.add(ws)
+
+        state = self._build_state_dict()
+        await ws.send_str(json.dumps({"type": "state", "data": state}))
+
+        await self._broadcast_to_riders(json.dumps({
+            "type": "driver_status",
+            "connected": True,
+            "name": self._driver_name or "Anonymous",
+        }))
+
+        try:
+            async for msg in ws:
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    try:
+                        data = json.loads(msg.data)
+                        if data.get("type") == "command":
+                            cmd = data.get("data", {})
+                            await self._process_command(cmd)
+                            await ws.send_str(json.dumps({"type": "command_ack", "ok": True}))
+                        elif data.get("type") == "ping":
+                            await ws.send_str(json.dumps({"type": "pong"}))
+                    except Exception as e:
+                        await ws.send_str(json.dumps({
+                            "type": "command_ack", "ok": False, "error": str(e),
+                        }))
+                elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSE):
+                    break
+        finally:
+            self._driver_wss.discard(ws)
+            if not self._driver_wss:
+                await self._broadcast_to_riders(json.dumps({
+                    "type": "driver_status",
+                    "connected": False,
+                    "name": "",
+                }))
+        return ws
+
+    async def _handle_rider_ws(self, req):
+        from aiohttp import web
+        ws = web.WebSocketResponse(max_msg_size=65536)
+        await ws.prepare(req)
+        self._rider_wss.add(ws)
+
+        rstate = self._build_rider_state_dict()
+        rstate["type"] = "rider_state"
+        await ws.send_str(json.dumps(rstate))
+
+        driver_connected = len(self._driver_wss) > 0
+        await ws.send_str(json.dumps({
+            "type": "driver_status",
+            "connected": driver_connected,
+            "name": self._driver_name or ("Anonymous" if driver_connected else ""),
+        }))
+
+        try:
+            async for msg in ws:
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    pass
+                elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSE):
+                    break
+        finally:
+            self._rider_wss.discard(ws)
+        return ws
+
+    def _build_app(self):
+        """Build a standalone aiohttp app for LAN mode testing."""
+        from aiohttp import web
+        from template_env import get_jinja_env
+        _jinja_env = get_jinja_env
+
+        engine = self
+
+        async def _handle_index(_req):
+            env = _jinja_env()
+            tmpl = env.get_template("driver.html")
+            html = tmpl.render(api_prefix="", driver_key="", room_code="")
+            return web.Response(text=html, content_type="text/html")
+
+        async def _handle_touch(_req):
+            env = _jinja_env()
+            tmpl = env.get_template("touch.html")
+            html = tmpl.render(api_prefix="", room_code="")
+            return web.Response(text=html, content_type="text/html")
+
+        app = web.Application()
+        app.router.add_get("/", _handle_index)
+        app.router.add_get("/touch", _handle_touch)
+        app.router.add_post("/command", engine._handle_command)
+        app.router.add_get("/state", engine._handle_state)
+        app.router.add_get("/rider-state", engine._handle_rider_state)
+        app.router.add_get("/driver-ws", engine._handle_driver_ws)
+        app.router.add_get("/rider-ws", engine._handle_rider_ws)
+        app.router.add_static("/public", str(Path(__file__).parent / "public"))
+        return app
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
