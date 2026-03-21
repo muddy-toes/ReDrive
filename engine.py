@@ -816,7 +816,7 @@ class DriveEngine:
 
     async def _handle_rider_ws(self, req):
         from aiohttp import web
-        ws = web.WebSocketResponse(max_msg_size=65536)
+        ws = web.WebSocketResponse(max_msg_size=1024*1024)
         await ws.prepare(req)
         self._rider_wss.add(ws)
 

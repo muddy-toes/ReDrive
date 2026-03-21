@@ -490,7 +490,7 @@ async def handle_rider_ws(req):
     if room is None:
         raise web.HTTPNotFound(text="Room not found or expired")
 
-    ws = web.WebSocketResponse(heartbeat=30, max_msg_size=65536)
+    ws = web.WebSocketResponse(heartbeat=30, max_msg_size=1024*1024)
     await ws.prepare(req)
     room.rider_wss.add(ws)
 
