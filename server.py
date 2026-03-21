@@ -199,8 +199,8 @@ class Room:
                     except Exception:
                         pass
 
-                # Push to rider WS connections every 3rd tick (~1.7 Hz)
-                if tick % 3 == 0 and self.rider_wss:
+                # Push to rider WS connections every tick (5 Hz, same as driver)
+                if self.rider_wss:
                     try:
                         rstate = self._build_rider_state()
                         rmsg = json.dumps({"type": "rider_state", **rstate})
