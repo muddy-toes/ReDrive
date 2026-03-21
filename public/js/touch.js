@@ -337,6 +337,45 @@ function updateDriverStatus(connected, name) {
 })();
 
 // ── Rider avatar ─────────────────────────────────────────────────────────────
+const _AVATAR_MAX_BYTES = 400 * 1024; // 400KB base64 limit (server caps at 512KB)
+const _AVATAR_MAX_DIM = 512;          // max width or height in pixels
+
+function _resizeImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      // Scale down if larger than max dimension
+      if (w > _AVATAR_MAX_DIM || h > _AVATAR_MAX_DIM) {
+        const scale = _AVATAR_MAX_DIM / Math.max(w, h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      // Start at high quality JPEG, reduce until under limit
+      let quality = 0.85;
+      let dataUrl = canvas.toDataURL('image/jpeg', quality);
+      while (dataUrl.length > _AVATAR_MAX_BYTES && quality > 0.2) {
+        quality -= 0.1;
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
+      }
+      if (dataUrl.length > _AVATAR_MAX_BYTES) {
+        // Still too big - scale down further
+        const scale2 = 0.5;
+        canvas.width = Math.round(w * scale2);
+        canvas.height = Math.round(h * scale2);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      }
+      resolve(dataUrl);
+    };
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 async function onAnatFileSelected(input) {
   if (!input.files || !input.files[0]) return;
   const file = input.files[0]; input.value = '';
@@ -344,18 +383,12 @@ async function onAnatFileSelected(input) {
   const orig = btn ? btn.childNodes[0].textContent : '';
   if (btn) btn.childNodes[0].textContent = 'Saving...';
   try {
-    const reader = new FileReader();
-    reader.onload = e => {
-      const dataUrl = e.target.result;
-      // Save locally for persistence across sessions
-      localStorage.setItem('reDriveAnatomyB64', dataUrl);
-      // Send to server via WS for immediate broadcast to driver
-      if (_riderWs && _riderWs.readyState === WebSocket.OPEN) {
-        _riderWs.send(JSON.stringify({type: 'set_avatar', data: dataUrl}));
-      }
-      if (btn) { btn.childNodes[0].textContent = 'Saved!'; setTimeout(()=>{ btn.childNodes[0].textContent = orig; }, 2000); }
-    };
-    reader.readAsDataURL(file);
+    const dataUrl = await _resizeImage(file);
+    localStorage.setItem('reDriveAnatomyB64', dataUrl);
+    if (_riderWs && _riderWs.readyState === WebSocket.OPEN) {
+      _riderWs.send(JSON.stringify({type: 'set_avatar', data: dataUrl}));
+    }
+    if (btn) { btn.childNodes[0].textContent = 'Saved!'; setTimeout(()=>{ btn.childNodes[0].textContent = orig; }, 2000); }
   } catch(_) {
     if (btn) { btn.childNodes[0].textContent = 'Error'; setTimeout(()=>{ btn.childNodes[0].textContent = orig; }, 2000); }
   }
