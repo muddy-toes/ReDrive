@@ -165,7 +165,7 @@ class Room:
         now = time.monotonic()
         intensity = 0.0
         if self.engine:
-            intensity = self.engine._pattern.intensity
+            intensity = self.engine._shared.get("__live__l0", self.engine._pattern.intensity)
         bottle_active = now < self.bottle_until
         return {
             "intensity":        round(intensity, 4),
