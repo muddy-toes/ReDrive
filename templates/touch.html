@@ -88,5 +88,15 @@ const API_PREFIX = "{{ api_prefix }}";
 })();
 </script>
 {% endif %}
+<script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
+<script>
+  kofiWidgetOverlay.draw('stimstation', {
+    'type': 'floating-chat',
+    'floating-chat.donateButton.text': 'Support Us',
+    'floating-chat.donateButton.background-color': '#d9534f',
+    'floating-chat.donateButton.text-color': '#fff',
+    'floating-chat.donateButton.position': 'bottom-right'
+  });
+</script>
 </body>
 </html>
