@@ -547,6 +547,18 @@ async def handle_rider_ws(req):
     return ws
 
 
+# -- Touch config (images + overlay from server config)
+
+async def handle_touch_config(req):
+    cfg = DriveConfig.load()
+    return web.Response(
+        text=json.dumps({
+            "images": cfg.touch_images,
+            "overlay": cfg.overlay_image,
+        }),
+        content_type="application/json")
+
+
 # -- Touch assets (shared across all rooms)
 
 async def handle_assets_list(req):
@@ -955,6 +967,7 @@ def build_app(local_room: Optional["Room"] = None) -> web.Application:
     _public_dir = str(Path(__file__).parent / "public")
     app.router.add_static("/public", _public_dir)
     app.router.add_get("/bottle.png",                          handle_bottle_png)
+    app.router.add_get("/touch_config",                        handle_touch_config)
     app.router.add_get("/touch_assets/list",                   handle_assets_list)
     app.router.add_get("/touch_assets/{type}/{subdir}/{name}", handle_assets_file)
     app.router.add_get("/touch_assets/{type}/{name}",          handle_assets_file)

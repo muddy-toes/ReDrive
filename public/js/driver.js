@@ -583,8 +583,8 @@ function setTab(tab) {
   const tp = document.getElementById('touch-panel');
   tp.style.display = tab === 'touch' ? 'flex' : 'none';
   const touchOnly = tab === 'touch' ? '' : 'none';
-  document.getElementById('overlay-btn').style.display = touchOnly;
-  document.getElementById('cursor-btn').style.display = touchOnly;
+  const cursorBtn = document.getElementById('cursor-btn');
+  if (cursorBtn) cursorBtn.style.display = touchOnly;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   if (tab === 'touch') {
     initTouchPanel();
@@ -1182,76 +1182,70 @@ function toggleCursor(btn) {
 let tcOverlayImg = null;
 let _tcOverlayOn = localStorage.getItem('reDriveOverlay') !== 'false'; // default true
 
-(function loadOverlayImg() {
-  const img = new Image();
-  img.onload = () => {
-    tcOverlayImg = img;
-    if (_tcOverlayOn && _driverMode === 'touch') tcDraw();
-  };
-  img.src = '/touch_assets/anatomy/anatomyexampleOVERLAY.png';
-})();
-
-function toggleOverlay(btn) {
-  _tcOverlayOn = !_tcOverlayOn;
-  localStorage.setItem('reDriveOverlay', String(_tcOverlayOn));
-  btn.innerHTML = 'GUIDE<br>' + (_tcOverlayOn ? 'ON' : 'OFF');
-  btn.title = _tcOverlayOn ? 'Overlay guide: ON' : 'Overlay guide: OFF';
-  btn.classList.toggle('active', _tcOverlayOn);
-  if (_driverMode === 'touch') tcDraw();
-}
-
-// Init overlay button state from localStorage
-(function initOverlayBtn() {
-  const btn = document.getElementById('overlay-btn');
-  if (!btn) return;
-  btn.classList.toggle('active', _tcOverlayOn);
-  btn.innerHTML = 'GUIDE<br>' + (_tcOverlayOn ? 'ON' : 'OFF');
-  btn.title = _tcOverlayOn ? 'Overlay guide: ON' : 'Overlay guide: OFF';
-})();
-
-// ── Category cycling ──────────────────────────────────────────────────────────
-let _tcCat = null;
-let _tcCatImages = [];
-let _tcCatIdx = 0;
-let _tcCatTimer = null;
-let _tcStandardImages = [];
-
-(async function loadStdImages() {
+(async function loadOverlayImg() {
   try {
-    const d = await (await fetch('/touch_assets/list?type=anatomy')).json();
-    _tcStandardImages = (d || []).filter(f => /^(hunk|toon|furry)/i.test(f));
-    // Restore saved category selection
-    const savedCat = localStorage.getItem('reDriveCat');
-    if (savedCat) setCategory(savedCat);
+    const d = await (await fetch('/touch_config')).json();
+    const overlayFile = d.overlay || 'overlay.png';
+    const img = new Image();
+    img.onload = () => {
+      tcOverlayImg = img;
+      if (_tcOverlayOn && _driverMode === 'touch') tcDraw();
+    };
+    img.src = '/touch_assets/anatomy/' + encodeURIComponent(overlayFile);
   } catch(_) {}
 })();
 
-function setCategory(cat) {
-  _tcCat = cat;
-  localStorage.setItem('reDriveCat', cat);
-  clearInterval(_tcCatTimer);
-  const imgs = _tcStandardImages.filter(f => f.toLowerCase().startsWith(cat));
-  if (!imgs.length) return;
-  _tcCatImages = imgs;
-  _tcCatIdx = 0;
-  _applyImage();
-  _tcCatTimer = setInterval(() => {
-    _tcCatIdx = (_tcCatIdx + 1) % _tcCatImages.length;
-    _applyImage();
-  }, 600000);
-  document.querySelectorAll('.cat-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
+function setOverlay(on) {
+  _tcOverlayOn = on;
+  localStorage.setItem('reDriveOverlay', String(on));
+  if (_driverMode === 'touch') tcDraw();
 }
 
-function _applyImage() {
-  // Prefer rider's custom upload
-  const custom = _tcParticipants.find(p => p.anatomy && p.anatomy.includes('_uploads'));
-  const src = custom
-    ? '/touch_assets/anatomy/' + custom.anatomy.split('/').map(encodeURIComponent).join('/')
-    : (_tcCatImages.length ? '/touch_assets/anatomy/' + encodeURIComponent(_tcCatImages[_tcCatIdx]) : null);
-  if (!src) return;
+// Init overlay checkbox from localStorage
+(function initOverlayCheck() {
+  const cb = document.getElementById('overlay-check');
+  if (cb) cb.checked = _tcOverlayOn;
+})();
+
+// ── Touch image selection (config-driven) ────────────────────────────────────
+let _tcImages = [];
+let _tcSelectedIdx = -1;
+
+(async function loadTouchConfig() {
+  try {
+    const d = await (await fetch('/touch_config')).json();
+    _tcImages = d.images || [];
+    // Build image buttons from config
+    const panel = document.getElementById('cat-panel');
+    if (panel) {
+      panel.textContent = '';
+      _tcImages.forEach((img, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'cat-btn';
+        btn.textContent = img.name;
+        btn.dataset.idx = idx;
+        btn.addEventListener('click', () => selectTouchImage(idx));
+        panel.appendChild(btn);
+      });
+    }
+    // Restore saved selection
+    const savedIdx = parseInt(localStorage.getItem('reDriveTouchIdx') || '0', 10);
+    if (savedIdx >= 0 && savedIdx < _tcImages.length) selectTouchImage(savedIdx);
+    else if (_tcImages.length) selectTouchImage(0);
+  } catch(_) {}
+})();
+
+function selectTouchImage(idx) {
+  if (idx < 0 || idx >= _tcImages.length) return;
+  _tcSelectedIdx = idx;
+  localStorage.setItem('reDriveTouchIdx', String(idx));
+  const entry = _tcImages[idx];
+  const src = '/touch_assets/anatomy/' + encodeURIComponent(entry.filename);
   const img = new Image();
   img.onload = () => { tcCustomImg = img; tcDraw(); };
   img.src = src;
+  document.querySelectorAll('.cat-btn').forEach((b, i) =>
+    b.classList.toggle('active', i === idx));
 }
 
 // ── Driver WebSocket — state push, participants, commands ─────────────────────

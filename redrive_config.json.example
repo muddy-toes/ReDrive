@@ -13,5 +13,12 @@
   "alpha_max_hz": 1.5,
   "alpha_min_amp": 0.2,
   "alpha_max_amp": 0.45,
-  "send_interval_ms": 50
+  "send_interval_ms": 50,
+  "touch_images": [
+    {"name": "Hunk 1", "filename": "hunk1.png"},
+    {"name": "Hunk 2", "filename": "hunk2.png"},
+    {"name": "Hunk 3", "filename": "hunk3.png"},
+    {"name": "Furry",  "filename": "furry1.png"}
+  ],
+  "overlay_image": "overlay.png"
 }

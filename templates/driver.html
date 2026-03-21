@@ -69,7 +69,6 @@ const DRIVER_KEY = "";
   <!-- Left: rider column -->
   <div id="rider-col">
     <div id="rider-cards"></div>
-    <button id="overlay-btn" onclick="toggleOverlay(this)" title="Overlay guide: ON" style="display:none">GUIDE<br>ON</button>
     <button id="cursor-btn" onclick="toggleCursor(this)" title="Cursor: dot" style="display:none">DOT</button>
   </div>
 
@@ -252,11 +251,7 @@ const DRIVER_KEY = "";
         <div id="tc-main">
           <canvas id="touch-canvas"></canvas>
         </div>
-        <div id="cat-panel">
-          <button class="cat-btn" data-cat="hunk" onclick="setCategory('hunk')">HUNK</button>
-          <button class="cat-btn" data-cat="toon" onclick="setCategory('toon')">TOON</button>
-          <button class="cat-btn" data-cat="furry" onclick="setCategory('furry')">FURRY</button>
-        </div>
+        <div id="cat-panel"></div>
       </div>
       <!-- Base Power gradient slider -->
       <div style="flex-shrink:0;padding:2px 0 0">
@@ -269,7 +264,12 @@ const DRIVER_KEY = "";
           <div id="tc-power-thumb" style="position:absolute;top:4px;bottom:4px;width:5px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,0.95);border-radius:3px;pointer-events:none;box-shadow:0 0 5px rgba(0,0,0,0.8)"></div>
         </div>
       </div>
-      <div id="tc-status" style="color:var(--fg2);font-size:11px;font-family:monospace;min-height:14px;flex-shrink:0">Tap or drag &middot; Y = position &middot; X = intensity</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <label style="font-size:11px;color:var(--fg2);display:flex;align-items:center;gap:4px;cursor:pointer">
+          <input type="checkbox" id="overlay-check" checked onchange="setOverlay(this.checked)"> Show overlay
+        </label>
+        <span id="tc-status" style="color:var(--fg2);font-size:11px;font-family:monospace;flex:1">Tap or drag &middot; Y = position &middot; X = intensity</span>
+      </div>
     </div><!-- end #touch-panel -->
 
   </div><!-- end #tab-area -->

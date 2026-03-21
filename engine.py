@@ -76,6 +76,17 @@ class DriveConfig:
     alpha_max_amp:    float = 0.45
     # Loop tick
     send_interval_ms: int   = 50
+    # Touch panel images (admin-configurable)
+    # Each entry: {"name": "Display Name", "filename": "image.png"}
+    # Files live in touch_assets/anatomy/
+    touch_images:     list  = field(default_factory=lambda: [
+        {"name": "Hunk 1", "filename": "hunk1.png"},
+        {"name": "Hunk 2", "filename": "hunk2.png"},
+        {"name": "Hunk 3", "filename": "hunk3.png"},
+        {"name": "Furry",  "filename": "furry1.png"},
+    ])
+    # Overlay image (transparent PNG in touch_assets/anatomy/, drawn over the touch image)
+    overlay_image:    str   = "overlay.png"
 
     def save(self):
         try:
