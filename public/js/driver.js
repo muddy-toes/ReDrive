@@ -614,6 +614,8 @@ const TC_TOOLS = {
 const TC_ELEC_BETA  = { '1':9999, '2':5000, '3':0 };
 const TC_ANAT_YF   = { tip:0.0, balls:0.5, anus:1.0 };
 const TC_ELEC_COLOR= { '1':'#ff4444', '2':'#ffcc14', '3':'#4488ff' };
+const TC_ARC_ALPHA_MIN = 0.20;  // arc amplitude at zero intensity
+const TC_ARC_ALPHA_MAX = 0.45;  // arc amplitude at full intensity
 
 let tcTool        = 'feather';
 let tcPointerDown = false;
@@ -748,6 +750,10 @@ function tcBetaFromY(y) {
     .sort((a,b) => a.y - b.y);
   if (y <= pts[0].y) return pts[0].beta;
   if (y >= pts[pts.length-1].y) return pts[pts.length-1].beta;
+  // Cosine arc: dwell at L+/R+ extremes, sweep through neutral
+  const ySpan = pts[pts.length-1].y - pts[0].y;
+  const t = (y - pts[0].y) / ySpan;
+  y = pts[0].y + ySpan * (0.5 - 0.5 * Math.cos(Math.PI * t));
   for (let i=0; i<pts.length-1; i++) {
     if (y>=pts[i].y && y<=pts[i+1].y) {
       const f=(y-pts[i].y)/(pts[i+1].y-pts[i].y);
@@ -755,6 +761,12 @@ function tcBetaFromY(y) {
     }
   }
   return 5000;
+}
+
+function tcAlphaFromY(y, intensity) {
+  // Arc: alpha pushes outward at midpoint, scaled by intensity
+  const amp = TC_ARC_ALPHA_MIN + (TC_ARC_ALPHA_MAX - TC_ARC_ALPHA_MIN) * intensity;
+  return 0.5 + amp * Math.sin(Math.PI * y);
 }
 
 function tcIntFromX(x) {
@@ -913,7 +925,8 @@ function tcOnDown(e) {
   tcLastX=pos.x; tcLastY=pos.y;
   tcTrail=[{x:pos.x,y:pos.y,p:tcIntFromX(pos.x),t:Date.now()}];
   _tcGesturePath.push({t:0, x:pos.x, y:pos.y});
-  sendCmd({beta_mode:'hold',beta:tcBetaFromY(pos.y),intensity:tcIntFromX(pos.x)});
+  const int0 = tcIntFromX(pos.x);
+  sendCmd({beta_mode:'hold',beta:tcBetaFromY(pos.y),alpha_pos:tcAlphaFromY(pos.y,int0),intensity:int0});
   tcDraw();
 }
 function tcOnMove(e) {
@@ -924,7 +937,8 @@ function tcOnMove(e) {
   tcTrail.push({x:pos.x,y:pos.y,p:tcIntFromX(pos.x),t:Date.now()});
   if (tcTrail.length>60) tcTrail.shift();
   _tcGesturePath.push({t:performance.now()-_tcGestureStart, x:pos.x, y:pos.y});
-  sendCmd({beta:tcBetaFromY(pos.y),intensity:tcIntFromX(pos.x)});
+  const intM = tcIntFromX(pos.x);
+  sendCmd({beta:tcBetaFromY(pos.y),alpha_pos:tcAlphaFromY(pos.y,intM),intensity:intM});
   tcDraw();
 }
 function tcOnUp() {
@@ -935,11 +949,11 @@ function tcOnUp() {
     _tcLoopStart=performance.now(); _tcLoopDur=dur*1000;
     tcSetLooping(true);
     // Send gesture to engine for server-side looping
-    const pts = _tcGesturePath.map(p => ({
-      t: p.t / 1000,
-      beta: tcBetaFromY(p.y),
-      intensity: tcIntFromX(p.x),
-    }));
+    const pts = _tcGesturePath.map(p => {
+      const gi = tcIntFromX(p.x);
+      return { t: p.t / 1000, beta: tcBetaFromY(p.y),
+               alpha: tcAlphaFromY(p.y, gi), intensity: gi };
+    });
     sendCmd({gesture_record: pts});
     sendCmd({beta_mode: 'touch'});
     // Highlight the touch mode button
@@ -965,11 +979,11 @@ function _updateResumeBtn() {
 function resumeTouchGesture() {
   if (_tcGesturePath.length < 2) return;
   // Re-send gesture to engine and switch to touch mode
-  const pts = _tcGesturePath.map(p => ({
-    t: p.t / 1000,
-    beta: tcBetaFromY(p.y),
-    intensity: tcIntFromX(p.x),
-  }));
+  const pts = _tcGesturePath.map(p => {
+    const ri = tcIntFromX(p.x);
+    return { t: p.t / 1000, beta: tcBetaFromY(p.y),
+             alpha: tcAlphaFromY(p.y, ri), intensity: ri };
+  });
   sendCmd({gesture_record: pts});
   sendCmd({beta_mode: 'touch'});
   _tcLoopStart = performance.now();

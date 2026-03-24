@@ -258,6 +258,7 @@ class DriveEngine:
         self._alpha_parked = True
         self._alpha_on     = True
         self._beta_override: Optional[int] = None   # None = auto
+        self._alpha_override: Optional[float] = None  # None = oscillate normally
         self._stop_ev: Optional[asyncio.Event] = None
         self._loop:    Optional[asyncio.AbstractEventLoop] = None
         self._next_connect_at: float = 0.0          # reconnect cooldown
@@ -284,7 +285,7 @@ class DriveEngine:
         self._spiral_tighten_rate:float = 0.03    # fraction of amp lost per second
         # Gesture loop playback
         self._gesture_active:   bool  = False
-        self._gesture_seq:      list  = []  # [(t_rel, beta, intensity), ...]
+        self._gesture_seq:      list  = []  # [(t_rel, beta, alpha, intensity), ...]
         self._gesture_t:        float = 0.0
         # LAN mode: driver name + bottle (popper) state
         self._driver_name:     str   = ""
@@ -377,7 +378,8 @@ class DriveEngine:
             if len(pts) >= 4:
                 t0 = float(pts[0]["t"])
                 self._gesture_seq = [
-                    (float(p["t"]) - t0, int(p["beta"]), float(p["intensity"]))
+                    (float(p["t"]) - t0, int(p["beta"]),
+                     float(p.get("alpha", 0.5)), float(p["intensity"]))
                     for p in pts
                 ]
                 self._gesture_t      = 0.0
@@ -498,10 +500,14 @@ class DriveEngine:
                 if mode in ("auto", "sweep", "hold", "spiral", "touch"):
                     self._beta_mode = mode
                     self._beta_sweep_phase = 0.0
+                    self._alpha_override = None  # release alpha to oscillator
                     if mode == "spiral":
                         self._spiral_phase = 0.0
                         self._spiral_amp   = 1.0
                     self._log(f"Beta mode: {mode}")
+            # alpha_pos after beta_mode so it re-overrides when both present (tcOnDown)
+            if "alpha_pos" in cmd:
+                self._alpha_override = float(cmd["alpha_pos"])
             if "beta_sweep" in cmd:
                 s = cmd["beta_sweep"]
                 if "hz" in s:
@@ -595,15 +601,18 @@ class DriveEngine:
 
             # ── Gesture loop (takes over entire output when active) ────────────
             if self._gesture_active and self._gesture_seq:
-                g_beta, g_int = self._gesture_advance(dt)
+                g_beta, g_alpha, g_int = self._gesture_advance(dt)
                 g_int = max(0.0, min(1.0, g_int))
+                g_alpha = max(0.0, min(1.0, g_alpha))
                 self._pattern.intensity = g_int
                 self._shared["__live__l0"] = g_int
                 self._shared["__live__l1"] = g_beta / 9999.0
+                self._shared["__live__l2"] = g_int  # alpha active during gesture
                 tv = _tv_floor(g_int, cfg.tcode_floor)
                 await self._send(
                     f"{cfg.axis_volume}{tv}I{cfg.send_interval_ms} "
-                    f"{cfg.axis_beta}{g_beta:04d}I{cfg.send_interval_ms}"
+                    f"{cfg.axis_beta}{g_beta:04d}I{cfg.send_interval_ms} "
+                    f"{cfg.axis_alpha}{_tv(g_alpha)}I{cfg.send_interval_ms}"
                 )
                 self._current_beta = g_beta
                 await asyncio.sleep(cfg.send_interval_ms / 1000.0)
@@ -712,29 +721,46 @@ class DriveEngine:
 
             await asyncio.sleep(cfg.send_interval_ms / 1000.0)
 
-    def _gesture_advance(self, dt: float) -> tuple[int, float]:
-        """Advance gesture playback by dt and return interpolated (beta, intensity)."""
+    def _gesture_advance(self, dt: float) -> tuple[int, float, float]:
+        """Advance gesture playback by dt and return interpolated (beta, alpha, intensity)."""
         seq = self._gesture_seq
         if not seq:
-            return self._current_beta, self._pattern.intensity
+            return self._current_beta, 0.5, self._pattern.intensity
         self._gesture_t += dt
         total = seq[-1][0]
         if total < 0.001:
-            return int(seq[0][1]), float(seq[0][2])
+            return int(seq[0][1]), float(seq[0][2]), float(seq[0][3])
         t = self._gesture_t % total
         for i in range(len(seq) - 1):
-            t0, b0, i0 = seq[i]
-            t1, b1, i1 = seq[i + 1]
+            t0, b0, a0, i0 = seq[i]
+            t1, b1, a1, i1 = seq[i + 1]
             if t0 <= t < t1:
                 frac = (t - t0) / max(0.001, t1 - t0)
-                return int(b0 + frac * (b1 - b0)), float(i0 + frac * (i1 - i0))
-        return int(seq[-1][1]), float(seq[-1][2])
+                return (int(b0 + frac * (b1 - b0)),
+                        float(a0 + frac * (a1 - a0)),
+                        float(i0 + frac * (i1 - i0)))
+        return int(seq[-1][1]), float(seq[-1][2]), float(seq[-1][3])
 
     async def _alpha_loop(self):
         """Drives L2 alpha oscillation."""
         while not self._stop_ev.is_set():
             cfg = self._cfg
             dt  = cfg.send_interval_ms / 1000.0
+
+            # Gesture playback handles alpha directly — skip
+            if self._gesture_active:
+                await asyncio.sleep(dt)
+                continue
+
+            # Touch arc override — driver is sending explicit alpha position
+            if self._alpha_override is not None:
+                pos = max(0.0, min(1.0, self._alpha_override))
+                await self._send(f"{cfg.axis_alpha}{_tv(pos)}I{int(dt * 1000)}")
+                self._alpha_parked = False
+                self._shared["__live__l2"] = self._pattern.intensity
+                await asyncio.sleep(dt)
+                continue
+
             eff = self._pattern.intensity if self._alpha_on else 0.0
 
             if eff < 0.01:
